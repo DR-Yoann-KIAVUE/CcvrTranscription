@@ -9,27 +9,40 @@
 - **Base SQLite**, auth Argon2id, CRUD patients/CR, recherche nom + contenu,
   export PDF + DOCX : implémentés et typés de bout en bout.
 
-## Perfs de transcription — mesures réelles manquantes
+## Perfs de transcription — MESURÉES (end-to-end, réel)
 
-**Je n'ai pas pu mesurer la qualité/vitesse réelle** : aucun modèle ggml n'était
-présent dans l'environnement de build (le modèle est fourni par l'utilisateur,
-jamais téléchargé par l'app). Le chemin de code est en place mais n'a pas été
-exercé sur de l'audio réel avec un vrai modèle.
+Testé le 15/07/2026 avec le modèle **`bofenghuang/whisper-large-v3-french`
+quantifié q5_0** (1,08 Go), sur **Apple M5 (10 cœurs)**, via la fonction réelle
+`transcribe::run_whisper` (même code que la commande Tauri). Audio de test :
+phrase médicale synthétisée (voix Thomas), WAV mono 16 kHz.
 
-Ordres de grandeur **attendus** (à confirmer sur la machine cible) :
+- **Qualité : excellente.** Transcription quasi parfaite, y compris le
+  vocabulaire médical (« douleur thoracique », « tension artérielle », « bilan
+  sanguin », « électrocardiogramme »). Seule divergence : « trois » → « 3 »
+  (normalisation numérique) et ponctuation de fin ramenée à des virgules sur un
+  débit continu (le nettoyage `cleanup.ts` re-découpe en phrases).
+- **Vitesse : ~2× plus rapide que le temps réel.** 13,5 s d'audio traités en
+  **6,4 s**, chargement du modèle inclus (whisper.cpp utilise Metal sur macOS).
 
-- `ggml-large-v3` (~3 Go) sur CPU Apple Silicon : compter **~0,5 à 1,5× la durée
-  de l'audio** selon le nombre de cœurs. whisper.cpp active Metal sur macOS, ce
-  qui accélère nettement (souvent nettement plus rapide que le temps réel).
-- Sur un CPU Windows sans accélération, large-v3 peut être **plus lent que le
-  temps réel** ; un modèle `medium` français est un bon compromis vitesse/qualité.
-- Le premier appel inclut le **chargement du modèle en mémoire** (quelques
-  secondes pour large-v3) — actuellement rechargé à chaque transcription.
+Ordres de grandeur pour les autres cas :
+
+- Modèle **q5_0** (1,08 Go) : excellent compromis, à recommander par défaut.
+- Modèle **full `ggml-model.bin`** (3,1 Go) : un peu plus précis, plus lent.
+- Sur un **CPU Windows sans accélération**, large-v3 peut être **plus lent que
+  le temps réel** ; un modèle `medium`/`turbo` est alors un bon compromis.
+- Le premier appel inclut le **chargement du modèle en mémoire** (~2-3 s pour
+  q5_0) — actuellement rechargé à chaque transcription (voir point fragile n°2).
+
+> Reproduire le test :
+> `cargo run --release --example transcribe_test -- <modele.bin> <audio.wav>`
+> (exemple dans [`src-tauri/examples/transcribe_test.rs`](src-tauri/examples/transcribe_test.rs)).
 
 ## Points fragiles / limites connues
 
-1. **Transcription non testée end-to-end** avec un vrai modèle (voir ci-dessus).
-   À valider en priorité sur la machine du médecin.
+1. **Transcription validée hors interface** (exemple `transcribe_test`, voir
+   ci-dessus) mais **pas encore via un vrai enregistrement micro dans l'app**
+   (le chemin MediaRecorder→WAV→IPC n'a pas été exercé avec une vraie voix). À
+   faire en priorité sur la machine du médecin.
 2. **Rechargement du modèle à chaque dictée** : `transcribe` recrée le
    `WhisperContext` à chaque appel. Correct mais pas optimal ; à mettre en cache
    dans l'état de l'app (v0.2).

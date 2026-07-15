@@ -1,6 +1,6 @@
 mod auth;
 mod db;
-mod transcribe;
+pub mod transcribe;
 
 use db::{CompteRendu, Patient, SearchHit};
 use rusqlite::Connection;
