@@ -1,0 +1,17 @@
+# Dépendances
+node_modules
+dist
+dist-ssr
+
+# Rust / Tauri
+src-tauri/target
+
+# Modèles Whisper (fichiers volumineux, à placer manuellement)
+src-tauri/models/*.bin
+models/*.bin
+
+# Divers
+*.log
+.DS_Store
+*.local
+.vite
