@@ -1,0 +1,5 @@
+# whisper.cpp (via whisper-rs-sys) utilise std::filesystem, disponible seulement
+# à partir de macOS 10.15. On fixe la cible de déploiement à 11.0 pour toute la
+# compilation (scripts de build C/C++ compris). Ignoré hors macOS.
+[env]
+MACOSX_DEPLOYMENT_TARGET = "11.0"

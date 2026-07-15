@@ -112,7 +112,11 @@ async function resampleTo16k(
       .webkitOfflineAudioContext;
   const offline = new OfflineCtx(1, outLen, TARGET_RATE);
   const buffer = offline.createBuffer(1, input.length, srcRate);
-  buffer.copyToChannel(input, 0);
+  // Copie garantie sur un ArrayBuffer (et non SharedArrayBuffer) pour satisfaire
+  // le typage de copyToChannel.
+  const src = new Float32Array(input.length);
+  src.set(input);
+  buffer.copyToChannel(src, 0);
   const node = offline.createBufferSource();
   node.buffer = buffer;
   node.connect(offline.destination);

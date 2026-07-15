@@ -37,6 +37,9 @@
     ],
     "category": "Medical",
     "shortDescription": "Dictée médicale locale",
-    "longDescription": "Application de dictée médicale 100 % locale avec transcription Whisper hors-ligne."
+    "longDescription": "Application de dictée médicale 100 % locale avec transcription Whisper hors-ligne.",
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    }
   }
 }

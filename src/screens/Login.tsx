@@ -1,0 +1,85 @@
+import { useEffect, useState } from "react";
+import { authIsConfigured, authSetup, authVerify } from "../api";
+
+export default function Login({ onSuccess }: { onSuccess: () => void }) {
+  const [configured, setConfigured] = useState<boolean | null>(null);
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    authIsConfigured()
+      .then(setConfigured)
+      .catch((e) => setError(String(e)));
+  }, []);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setBusy(true);
+    try {
+      if (configured) {
+        const ok = await authVerify(password);
+        if (ok) onSuccess();
+        else setError("Mot de passe incorrect.");
+      } else {
+        if (password.length < 4) {
+          setError("Le mot de passe doit contenir au moins 4 caractères.");
+        } else if (password !== confirm) {
+          setError("Les mots de passe ne correspondent pas.");
+        } else {
+          await authSetup(password);
+          onSuccess();
+        }
+      }
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="login-wrap">
+      <form className="login-card" onSubmit={submit}>
+        <div className="login-logo">🩺</div>
+        <h1>Dictée médicale</h1>
+        <p>
+          {configured === null
+            ? "Chargement…"
+            : configured
+            ? "Saisissez votre mot de passe local"
+            : "Créez votre mot de passe local"}
+        </p>
+
+        <input
+          type="password"
+          placeholder="Mot de passe"
+          value={password}
+          autoFocus
+          onChange={(e) => setPassword(e.target.value)}
+          disabled={busy || configured === null}
+        />
+        {configured === false && (
+          <input
+            type="password"
+            placeholder="Confirmer le mot de passe"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            disabled={busy}
+          />
+        )}
+
+        <div className="error">{error}</div>
+
+        <button className="primary" type="submit" disabled={busy || !password}>
+          {configured === false ? "Créer et entrer" : "Déverrouiller"}
+        </button>
+        <p style={{ marginTop: 16, fontSize: 11 }}>
+          Toutes les données restent sur cet ordinateur.
+        </p>
+      </form>
+    </div>
+  );
+}

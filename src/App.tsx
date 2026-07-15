@@ -1,21 +1,46 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import Login from "./screens/Login";
+import Library from "./screens/Library";
+import Dictation from "./screens/Dictation";
+import type { CompteRendu, Patient } from "./types";
 
-// Échafaudage minimal — remplacé par les écrans réels une fois le build validé.
+type View =
+  | { name: "login" }
+  | { name: "library" }
+  | { name: "dictation"; patient: Patient; existing: CompteRendu | null };
+
 export default function App() {
-  const [ready, setReady] = useState(false);
+  const [view, setView] = useState<View>({ name: "login" });
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  useEffect(() => {
-    setReady(true);
-  }, []);
+  if (view.name === "login") {
+    return <Login onSuccess={() => setView({ name: "library" })} />;
+  }
+
+  if (view.name === "dictation") {
+    return (
+      <div style={{ height: "100%", overflowY: "auto" }}>
+        <div className="main">
+          <Dictation
+            patient={view.patient}
+            existing={view.existing}
+            onBack={() => {
+              setRefreshKey((k) => k + 1);
+              setView({ name: "library" });
+            }}
+            onSaved={() => setRefreshKey((k) => k + 1)}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="login-wrap">
-      <div className="login-card">
-        <div className="login-logo">🩺</div>
-        <h1>Dictée médicale</h1>
-        <p>v0.1 alpha — 100 % local</p>
-        <span className="badge">{ready ? "Fenêtre prête" : "Chargement…"}</span>
-      </div>
-    </div>
+    <Library
+      refreshKey={refreshKey}
+      onOpen={(patient, existing) =>
+        setView({ name: "dictation", patient, existing })
+      }
+    />
   );
 }
