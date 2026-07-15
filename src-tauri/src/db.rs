@@ -292,27 +292,34 @@ pub fn search_comptes_rendus(conn: &Connection, query: &str) -> DbResult<Vec<Sea
 }
 
 /// Construit un court extrait autour de la première occurrence du terme.
+/// Travaille sur des indices de *caractères* (jamais d'octets) pour éviter tout
+/// risque de découpe au milieu d'un caractère UTF-8 accentué.
 fn extrait(texte: &str, terme: &str) -> String {
     let plat: String = texte
         .replace(['\n', '\r'], " ")
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ");
+    let chars: Vec<char> = plat.chars().collect();
+
+    // Position (en caractères) de la première occurrence, insensible à la casse.
     let lower = plat.to_lowercase();
-    let idx = lower.find(&terme.to_lowercase()).unwrap_or(0);
-    // Fenêtre de ~120 caractères, alignée sur des frontières de caractères UTF-8.
-    let start = plat[..idx].char_indices().rev().nth(40).map(|(i, _)| i).unwrap_or(0);
-    let end = plat[idx..]
-        .char_indices()
-        .nth(120)
-        .map(|(i, _)| idx + i)
-        .unwrap_or(plat.len());
+    let terme_l = terme.to_lowercase();
+    let match_char = lower
+        .find(&terme_l)
+        .map(|byte_idx| lower[..byte_idx].chars().count())
+        .unwrap_or(0)
+        .min(chars.len());
+
+    let start = match_char.saturating_sub(40);
+    let end = (match_char + 120).min(chars.len());
+
     let mut s = String::new();
     if start > 0 {
         s.push('…');
     }
-    s.push_str(plat[start..end].trim());
-    if end < plat.len() {
+    s.push_str(chars[start..end].iter().collect::<String>().trim());
+    if end < chars.len() {
         s.push('…');
     }
     s
