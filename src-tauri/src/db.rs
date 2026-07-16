@@ -21,11 +21,24 @@ pub struct CompteRendu {
     pub id: i64,
     pub patient_id: i64,
     pub titre: String,
+    /// Clé du type de compte-rendu cardiologique (ex. "ett", "ecg", "effort").
+    pub type_cr: Option<String>,
     pub date_consultation: String,
     pub texte: String,
     pub audio_path: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+}
+
+/// Une version archivée du texte d'un compte-rendu.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CrVersion {
+    pub id: i64,
+    pub compte_rendu_id: i64,
+    pub texte: String,
+    /// 'transcription' | 'regeneration' | 'edition'
+    pub origine: String,
+    pub created_at: String,
 }
 
 /// Résultat de recherche plein-texte : un CR + le nom du patient.
@@ -68,10 +81,21 @@ fn init_schema(conn: &Connection) -> DbResult<()> {
             texte             TEXT NOT NULL DEFAULT '',
             audio_path        TEXT,
             created_at        TEXT NOT NULL,
-            updated_at        TEXT NOT NULL
+            updated_at        TEXT NOT NULL,
+            type_cr           TEXT
         );
 
         CREATE INDEX IF NOT EXISTS idx_cr_patient ON comptes_rendus(patient_id);
+
+        CREATE TABLE IF NOT EXISTS cr_versions (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            compte_rendu_id   INTEGER NOT NULL REFERENCES comptes_rendus(id) ON DELETE CASCADE,
+            texte             TEXT NOT NULL,
+            origine           TEXT NOT NULL,
+            created_at        TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_ver_cr ON cr_versions(compte_rendu_id);
 
         CREATE TABLE IF NOT EXISTS app_config (
             cle    TEXT PRIMARY KEY,
@@ -79,7 +103,22 @@ fn init_schema(conn: &Connection) -> DbResult<()> {
         );
         "#,
     )
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+
+    migrate(conn)
+}
+
+/// Migrations légères pour les bases créées avant l'ajout de colonnes.
+fn migrate(conn: &Connection) -> DbResult<()> {
+    let has_type_cr: bool = conn
+        .prepare("SELECT 1 FROM pragma_table_info('comptes_rendus') WHERE name = 'type_cr'")
+        .and_then(|mut s| s.exists([]))
+        .map_err(|e| e.to_string())?;
+    if !has_type_cr {
+        conn.execute("ALTER TABLE comptes_rendus ADD COLUMN type_cr TEXT", [])
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 // ---------- Configuration (clé/valeur) ----------
@@ -173,11 +212,12 @@ fn map_cr(r: &rusqlite::Row) -> rusqlite::Result<CompteRendu> {
         audio_path: r.get(5)?,
         created_at: r.get(6)?,
         updated_at: r.get(7)?,
+        type_cr: r.get(8)?,
     })
 }
 
 const CR_COLS: &str =
-    "id, patient_id, titre, date_consultation, texte, audio_path, created_at, updated_at";
+    "id, patient_id, titre, date_consultation, texte, audio_path, created_at, updated_at, type_cr";
 
 pub fn list_comptes_rendus(conn: &Connection, patient_id: i64) -> DbResult<Vec<CompteRendu>> {
     let sql = format!(
@@ -202,37 +242,95 @@ pub fn create_compte_rendu(
     conn: &Connection,
     patient_id: i64,
     titre: &str,
+    type_cr: Option<&str>,
     date_consultation: &str,
     texte: &str,
     audio_path: Option<&str>,
+    origine: &str,
     now: &str,
 ) -> DbResult<CompteRendu> {
     conn.execute(
         "INSERT INTO comptes_rendus
-            (patient_id, titre, date_consultation, texte, audio_path, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
-        params![patient_id, titre, date_consultation, texte, audio_path, now],
+            (patient_id, titre, type_cr, date_consultation, texte, audio_path, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)",
+        params![patient_id, titre, type_cr, date_consultation, texte, audio_path, now],
     )
     .map_err(|e| e.to_string())?;
-    get_compte_rendu(conn, conn.last_insert_rowid())
+    let id = conn.last_insert_rowid();
+    add_version(conn, id, texte, origine, now)?;
+    get_compte_rendu(conn, id)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn update_compte_rendu(
     conn: &Connection,
     id: i64,
     titre: &str,
+    type_cr: Option<&str>,
     date_consultation: &str,
     texte: &str,
+    origine: &str,
     now: &str,
 ) -> DbResult<CompteRendu> {
+    // N'archive une nouvelle version que si le texte a réellement changé.
+    let previous: Option<String> = conn
+        .query_row(
+            "SELECT texte FROM comptes_rendus WHERE id = ?1",
+            params![id],
+            |r| r.get(0),
+        )
+        .ok();
     conn.execute(
         "UPDATE comptes_rendus
-         SET titre = ?2, date_consultation = ?3, texte = ?4, updated_at = ?5
+         SET titre = ?2, type_cr = ?3, date_consultation = ?4, texte = ?5, updated_at = ?6
          WHERE id = ?1",
-        params![id, titre, date_consultation, texte, now],
+        params![id, titre, type_cr, date_consultation, texte, now],
     )
     .map_err(|e| e.to_string())?;
+    if previous.as_deref() != Some(texte) {
+        add_version(conn, id, texte, origine, now)?;
+    }
     get_compte_rendu(conn, id)
+}
+
+// ---------- Versions / archives ----------
+
+pub fn add_version(
+    conn: &Connection,
+    compte_rendu_id: i64,
+    texte: &str,
+    origine: &str,
+    now: &str,
+) -> DbResult<()> {
+    conn.execute(
+        "INSERT INTO cr_versions (compte_rendu_id, texte, origine, created_at)
+         VALUES (?1, ?2, ?3, ?4)",
+        params![compte_rendu_id, texte, origine, now],
+    )
+    .map(|_| ())
+    .map_err(|e| e.to_string())
+}
+
+pub fn list_versions(conn: &Connection, compte_rendu_id: i64) -> DbResult<Vec<CrVersion>> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, compte_rendu_id, texte, origine, created_at
+             FROM cr_versions WHERE compte_rendu_id = ?1
+             ORDER BY id DESC",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params![compte_rendu_id], |r| {
+            Ok(CrVersion {
+                id: r.get(0)?,
+                compte_rendu_id: r.get(1)?,
+                texte: r.get(2)?,
+                origine: r.get(3)?,
+                created_at: r.get(4)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
 }
 
 pub fn rename_compte_rendu(conn: &Connection, id: i64, titre: &str, now: &str) -> DbResult<()> {

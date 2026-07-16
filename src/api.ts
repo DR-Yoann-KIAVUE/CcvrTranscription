@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { CompteRendu, Patient, SearchHit } from "./types";
+import type { CompteRendu, CrVersion, Patient, SearchHit } from "./types";
+
+export type Origine = "transcription" | "regeneration" | "edition";
 
 const nowIso = () => new Date().toISOString();
 
@@ -35,31 +37,41 @@ export const getCompteRendu = (id: number) =>
 export const createCompteRendu = (args: {
   patientId: number;
   titre: string;
+  typeCr: string | null;
   dateConsultation: string;
   texte: string;
   audioPath: string | null;
+  origine: Origine;
 }) =>
   invoke<CompteRendu>("create_compte_rendu", {
     patientId: args.patientId,
     titre: args.titre,
+    typeCr: args.typeCr,
     dateConsultation: args.dateConsultation,
     texte: args.texte,
     audioPath: args.audioPath,
+    origine: args.origine,
     now: nowIso(),
   });
 export const updateCompteRendu = (args: {
   id: number;
   titre: string;
+  typeCr: string | null;
   dateConsultation: string;
   texte: string;
+  origine: Origine;
 }) =>
   invoke<CompteRendu>("update_compte_rendu", {
     id: args.id,
     titre: args.titre,
+    typeCr: args.typeCr,
     dateConsultation: args.dateConsultation,
     texte: args.texte,
+    origine: args.origine,
     now: nowIso(),
   });
+export const listCrVersions = (compteRenduId: number) =>
+  invoke<CrVersion[]>("list_cr_versions", { compteRenduId });
 export const renameCompteRendu = (id: number, titre: string) =>
   invoke<void>("rename_compte_rendu", { id, titre, now: nowIso() });
 export const deleteCompteRendu = (id: number) =>
@@ -70,28 +82,13 @@ export const searchComptesRendus = (query: string) =>
 // ---- Audio ----
 export const saveRecording = (wav: Uint8Array, name: string) =>
   invoke<string>("save_recording", { wav: Array.from(wav), name });
-export const readAudio = async (path: string): Promise<ArrayBuffer> => {
-  // La commande renvoie un tauri::ipc::Response -> ArrayBuffer côté JS.
-  const res = await invoke<ArrayBuffer>("read_audio", { path });
-  return res;
-};
 
 // ---- Transcription ----
 export const transcribe = (path: string) =>
   invoke<string>("transcribe", { path });
 
-// ---- Export ----
-export const exportDocuments = (args: {
-  dir: string;
-  baseName: string;
-  pdf: Uint8Array;
-  docx: Uint8Array;
-  audio: string | null;
-}) =>
-  invoke<string[]>("export_documents", {
-    dir: args.dir,
-    baseName: args.baseName,
-    pdf: Array.from(args.pdf),
-    docx: Array.from(args.docx),
-    audio: args.audio,
-  });
+// ---- Export granulaire ----
+export const saveBytes = (path: string, bytes: Uint8Array) =>
+  invoke<string>("save_bytes", { path, bytes: Array.from(bytes) });
+export const copyFile = (src: string, dest: string) =>
+  invoke<string>("copy_file", { src, dest });

@@ -2,7 +2,7 @@ mod auth;
 mod db;
 pub mod transcribe;
 
-use db::{CompteRendu, Patient, SearchHit};
+use db::{CompteRendu, CrVersion, Patient, SearchHit};
 use rusqlite::Connection;
 use std::fs;
 use std::path::PathBuf;
@@ -160,13 +160,16 @@ fn get_compte_rendu(state: State<AppState>, id: i64) -> Result<CompteRendu, Stri
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 fn create_compte_rendu(
     state: State<AppState>,
     patient_id: i64,
     titre: String,
+    type_cr: Option<String>,
     date_consultation: String,
     texte: String,
     audio_path: Option<String>,
+    origine: String,
     now: String,
 ) -> Result<CompteRendu, String> {
     let conn = state.db.lock().map_err(|_| "verrou DB")?;
@@ -174,24 +177,47 @@ fn create_compte_rendu(
         &conn,
         patient_id,
         titre.trim(),
+        type_cr.as_deref(),
         &date_consultation,
         &texte,
         audio_path.as_deref(),
+        &origine,
         &now,
     )
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 fn update_compte_rendu(
     state: State<AppState>,
     id: i64,
     titre: String,
+    type_cr: Option<String>,
     date_consultation: String,
     texte: String,
+    origine: String,
     now: String,
 ) -> Result<CompteRendu, String> {
     let conn = state.db.lock().map_err(|_| "verrou DB")?;
-    db::update_compte_rendu(&conn, id, titre.trim(), &date_consultation, &texte, &now)
+    db::update_compte_rendu(
+        &conn,
+        id,
+        titre.trim(),
+        type_cr.as_deref(),
+        &date_consultation,
+        &texte,
+        &origine,
+        &now,
+    )
+}
+
+#[tauri::command]
+fn list_cr_versions(
+    state: State<AppState>,
+    compte_rendu_id: i64,
+) -> Result<Vec<CrVersion>, String> {
+    let conn = state.db.lock().map_err(|_| "verrou DB")?;
+    db::list_versions(&conn, compte_rendu_id)
 }
 
 #[tauri::command]
@@ -244,13 +270,6 @@ fn save_recording(app: AppHandle, wav: Vec<u8>, name: String) -> Result<String, 
     Ok(file.display().to_string())
 }
 
-/// Lit un fichier audio et renvoie ses octets (pour la réécoute).
-#[tauri::command]
-fn read_audio(path: String) -> Result<tauri::ipc::Response, String> {
-    let bytes = fs::read(&path).map_err(|e| e.to_string())?;
-    Ok(tauri::ipc::Response::new(bytes))
-}
-
 // ---------- Commande : transcription ----------
 
 #[tauri::command]
@@ -262,46 +281,23 @@ async fn transcribe(app: AppHandle, path: String) -> Result<String, String> {
         .map_err(|e| format!("Erreur d'exécution : {e}"))?
 }
 
-// ---------- Commande : export ----------
+// ---------- Commandes : export granulaire ----------
 
-/// Écrit les fichiers PDF et DOCX (et copie l'audio WAV si fourni) dans le
-/// dossier choisi. Renvoie les chemins créés.
+/// Écrit des octets bruts vers un chemin choisi par l'utilisateur (PDF, DOCX…).
 #[tauri::command]
-fn export_documents(
-    dir: String,
-    base_name: String,
-    pdf: Vec<u8>,
-    docx: Vec<u8>,
-    audio: Option<String>,
-) -> Result<Vec<String>, String> {
-    let base: String = base_name
-        .chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' || c == ' ' { c } else { '_' })
-        .collect();
-    let base = base.trim();
-    let base = if base.is_empty() { "compte-rendu" } else { base };
+fn save_bytes(path: String, bytes: Vec<u8>) -> Result<String, String> {
+    fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+    Ok(path)
+}
 
-    let dir_path = PathBuf::from(&dir);
-    let pdf_path = dir_path.join(format!("{base}.pdf"));
-    let docx_path = dir_path.join(format!("{base}.docx"));
-    fs::write(&pdf_path, &pdf).map_err(|e| e.to_string())?;
-    fs::write(&docx_path, &docx).map_err(|e| e.to_string())?;
-
-    let mut created = vec![
-        pdf_path.display().to_string(),
-        docx_path.display().to_string(),
-    ];
-
-    // Copie l'enregistrement audio à côté des documents, s'il existe.
-    if let Some(src) = audio {
-        if !src.is_empty() && PathBuf::from(&src).exists() {
-            let wav_path = dir_path.join(format!("{base}.wav"));
-            fs::copy(&src, &wav_path).map_err(|e| e.to_string())?;
-            created.push(wav_path.display().to_string());
-        }
+/// Copie un fichier (ex. l'audio WAV) vers un chemin choisi.
+#[tauri::command]
+fn copy_file(src: String, dest: String) -> Result<String, String> {
+    if !PathBuf::from(&src).exists() {
+        return Err("Fichier source introuvable.".into());
     }
-
-    Ok(created)
+    fs::copy(&src, &dest).map_err(|e| e.to_string())?;
+    Ok(dest)
 }
 
 // ---------- Point d'entrée ----------
@@ -335,13 +331,14 @@ pub fn run() {
             get_compte_rendu,
             create_compte_rendu,
             update_compte_rendu,
+            list_cr_versions,
             rename_compte_rendu,
             delete_compte_rendu,
             search_comptes_rendus,
             save_recording,
-            read_audio,
             transcribe,
-            export_documents,
+            save_bytes,
+            copy_file,
         ])
         .run(tauri::generate_context!())
         .expect("erreur au lancement de l'application Tauri");

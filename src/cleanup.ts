@@ -1,5 +1,5 @@
 // Nettoyage léger de la sortie Whisper : espaces, capitalisation,
-// et regroupement en paragraphes lisibles (HTML pour l'éditeur).
+// et regroupement en paragraphes de longueur naturelle (HTML pour l'éditeur).
 
 function escapeHtml(s: string): string {
   return s
@@ -9,27 +9,27 @@ function escapeHtml(s: string): string {
 }
 
 export function cleanTranscript(raw: string): string {
-  let text = raw.replace(/\s+/g, " ").trim();
+  const text = raw.replace(/\s+/g, " ").trim();
   if (!text) return "<p></p>";
 
-  // Espaces avant ponctuation double (règle typographique française simple).
-  text = text
-    .replace(/\s+([,.;:!?])/g, "$1")
-    .replace(/([;:!?])(?=\S)/g, "$1 ")
-    .replace(/\s{2,}/g, " ");
-
   // Découpe en phrases en conservant la ponctuation finale.
-  const sentences = text.match(/[^.!?]+[.!?]*/g) ?? [text];
-  const cleaned = sentences
+  const sentences = (text.match(/[^.!?…]+[.!?…]*/g) ?? [text])
     .map((s) => s.trim())
     .filter(Boolean)
-    .map((s) => s.charAt(0).toUpperCase() + s.slice(1));
+    .map((s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s));
 
-  // Regroupe ~3 phrases par paragraphe.
+  // Regroupe les phrases en paragraphes d'environ 300 caractères, sans couper
+  // une phrase. Donne un rendu proche d'un compte-rendu rédigé.
   const paragraphs: string[] = [];
-  for (let i = 0; i < cleaned.length; i += 3) {
-    paragraphs.push(cleaned.slice(i, i + 3).join(" "));
+  let current = "";
+  for (const s of sentences) {
+    if (current && current.length + s.length > 300) {
+      paragraphs.push(current.trim());
+      current = "";
+    }
+    current += (current ? " " : "") + s;
   }
+  if (current.trim()) paragraphs.push(current.trim());
 
   return paragraphs.map((p) => `<p>${escapeHtml(p)}</p>`).join("");
 }

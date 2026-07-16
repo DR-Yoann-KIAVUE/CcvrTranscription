@@ -60,7 +60,7 @@ export default function Recorder({ onFinished, disabled }: Props) {
     <div className="recorder">
       <div className="rec-row">
         {recording ? (
-          <button className="danger" onClick={stop}>
+          <button className="stop" onClick={stop}>
             Arrêter la dictée
           </button>
         ) : (

@@ -11,6 +11,7 @@ import {
 } from "../api";
 import type { CompteRendu, Patient, SearchHit } from "../types";
 import { formatDate } from "../format";
+import { reportTypeLabel } from "../reportTypes";
 
 interface Props {
   onOpen: (patient: Patient, existing: CompteRendu | null) => void;
@@ -240,7 +241,14 @@ export default function Library({ onOpen, onLogout, refreshKey }: Props) {
             )}
             {crs.map((cr) => (
               <div key={cr.id} className="list-item" onClick={() => onOpen(selected, cr)}>
-                <div className="title">{cr.titre}</div>
+                <div className="title">
+                  {cr.titre}
+                  {reportTypeLabel(cr.type_cr) && (
+                    <span className="badge" style={{ marginLeft: 8 }}>
+                      {reportTypeLabel(cr.type_cr)}
+                    </span>
+                  )}
+                </div>
                 <div className="sub">
                   {formatDate(cr.date_consultation)}
                   {"  ·  "}
