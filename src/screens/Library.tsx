@@ -131,14 +131,14 @@ export default function Library({ onOpen, onLogout, refreshKey }: Props) {
               justifyContent: "space-between",
             }}
           >
-            <h2 style={{ marginBottom: 12 }}>🩺 Patients</h2>
+            <h2 style={{ marginBottom: 12 }}>Patients</h2>
             <button
               className="ghost"
               title="Verrouiller et changer d'utilisateur"
               onClick={onLogout}
               style={{ marginBottom: 12 }}
             >
-              🔒 Verrouiller
+              Verrouiller
             </button>
           </div>
           <input
@@ -218,7 +218,7 @@ export default function Library({ onOpen, onLogout, refreshKey }: Props) {
                   {h.titre} <span className="badge">{h.patient_nom}</span>
                 </div>
                 <div className="sub">
-                  {formatDate(h.date_consultation)} — {h.extrait}
+                  {formatDate(h.date_consultation)} · {h.extrait}
                 </div>
               </div>
             ))}
@@ -229,7 +229,7 @@ export default function Library({ onOpen, onLogout, refreshKey }: Props) {
               <h2 style={{ margin: 0 }}>{selected.nom}</h2>
               <div className="spacer" />
               <button className="primary" onClick={() => onOpen(selected, null)}>
-                🎙 Nouvelle dictée
+                Nouvelle dictée
               </button>
             </div>
             {crs.length === 0 && (

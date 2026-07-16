@@ -237,8 +237,15 @@ textarea:focus {
   padding: 11px 14px;
 }
 .login-logo {
-  font-size: 42px;
-  line-height: 1;
+  width: 52px;
+  height: 52px;
+  margin: 0 auto;
+  border-radius: 12px;
+  background: var(--text);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .error {
   color: var(--danger);

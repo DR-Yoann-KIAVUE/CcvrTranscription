@@ -61,11 +61,11 @@ export default function Recorder({ onFinished, disabled }: Props) {
       <div className="rec-row">
         {recording ? (
           <button className="danger" onClick={stop}>
-            ⏹ Arrêter la dictée
+            Arrêter la dictée
           </button>
         ) : (
           <button className="primary" onClick={start} disabled={disabled}>
-            🎙 Démarrer la dictée
+            Démarrer la dictée
           </button>
         )}
         {recording && <span className="rec-dot" />}

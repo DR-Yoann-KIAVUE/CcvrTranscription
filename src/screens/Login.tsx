@@ -43,7 +43,22 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
   return (
     <div className="login-wrap">
       <form className="login-card" onSubmit={submit}>
-        <div className="login-logo">🩺</div>
+        <div className="login-logo" aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            width="24"
+            height="24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <rect x="9" y="2" width="6" height="12" rx="3" />
+            <path d="M5 11a7 7 0 0 0 14 0" />
+            <line x1="12" y1="18" x2="12" y2="22" />
+          </svg>
+        </div>
         <h1>Dictée médicale</h1>
         <p>
           {configured === null
@@ -77,7 +92,7 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
           {configured === false ? "Créer et entrer" : "Déverrouiller"}
         </button>
         <div className="disclaimer">
-          <strong>🔒 Données de santé — stockage 100 % local.</strong>
+          <strong>Données de santé, stockage 100 % local.</strong>
           <span>
             Pour des raisons de réglementation et de sécurité, toutes les données
             restent sur cet ordinateur : aucune sauvegarde automatique, aucun

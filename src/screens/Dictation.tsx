@@ -71,7 +71,7 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
         kind: "done",
         msg: text
           ? "Transcription terminée. Relisez et corrigez si besoin."
-          : "Transcription vide — vérifiez le micro et réessayez.",
+          : "Transcription vide, vérifiez le micro et réessayez.",
       });
     } catch (e) {
       setStatus({ kind: "error", msg: String(e) });
@@ -159,16 +159,17 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
     <div>
       <div className="toolbar">
         <button className="ghost" onClick={onBack}>
-          ← Retour
+          Retour
         </button>
         <h2 style={{ margin: 0 }}>
-          {existing ? "Compte-rendu" : "Nouvelle dictée"} — {patient.nom}
+          {existing ? "Compte-rendu de " : "Nouvelle dictée pour "}
+          {patient.nom}
         </h2>
       </div>
 
       {!modelOk && (
         <div className="recorder" style={{ borderColor: "var(--danger)" }}>
-          <strong>⚠️ Modèle Whisper introuvable.</strong>
+          <strong>Modèle Whisper introuvable.</strong>
           <p style={{ fontSize: 13, color: "var(--muted)" }}>
             Placez un fichier <code>ggml-*.bin</code> (français) dans :
             <br />
@@ -190,11 +191,11 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
         }
         style={status.kind === "error" ? { color: "var(--danger)" } : undefined}
       >
-        {status.kind === "saving-audio" && "💾 Sauvegarde de l'audio…"}
+        {status.kind === "saving-audio" && "Sauvegarde de l'audio en cours…"}
         {status.kind === "transcribing" &&
-          "⏳ Transcription Whisper en cours (cela peut prendre un moment)…"}
-        {status.kind === "done" && "✓ " + status.msg}
-        {status.kind === "error" && "✕ " + status.msg}
+          "Transcription Whisper en cours (cela peut prendre un moment)…"}
+        {status.kind === "done" && status.msg}
+        {status.kind === "error" && status.msg}
       </div>
 
       <div className="row">
@@ -224,14 +225,14 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
 
       <div className="toolbar" style={{ marginTop: 16 }}>
         <button onClick={replay} disabled={!audioPath}>
-          🔊 Réécouter
+          Réécouter
         </button>
         <div className="spacer" />
         <button className="primary" onClick={save} disabled={busy}>
-          💾 Enregistrer
+          Enregistrer
         </button>
         <button onClick={download} disabled={!hasContent}>
-          ⬇ Télécharger (PDF + DOCX{audioPath ? " + audio" : ""})
+          Télécharger (PDF + DOCX{audioPath ? " + audio" : ""})
         </button>
       </div>
     </div>
