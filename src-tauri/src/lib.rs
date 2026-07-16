@@ -78,8 +78,8 @@ fn auth_is_configured(state: State<AppState>) -> Result<bool, String> {
 
 #[tauri::command]
 fn auth_setup(state: State<AppState>, password: String) -> Result<(), String> {
-    if password.len() < 4 {
-        return Err("Le mot de passe doit contenir au moins 4 caractères.".into());
+    if password.chars().count() < 8 {
+        return Err("Le mot de passe doit contenir au moins 8 caractères.".into());
     }
     let conn = state.db.lock().map_err(|_| "verrou DB")?;
     if db::config_get(&conn, CFG_PASSWORD)?.is_some() {

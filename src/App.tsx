@@ -13,34 +13,28 @@ export default function App() {
   const [view, setView] = useState<View>({ name: "login" });
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const logout = () => setView({ name: "login" });
-
   if (view.name === "login") {
     return <Login onSuccess={() => setView({ name: "library" })} />;
   }
 
   if (view.name === "dictation") {
     return (
-      <div style={{ height: "100%", overflowY: "auto" }}>
-        <div className="main">
-          <Dictation
-            patient={view.patient}
-            existing={view.existing}
-            onBack={() => {
-              setRefreshKey((k) => k + 1);
-              setView({ name: "library" });
-            }}
-            onSaved={() => setRefreshKey((k) => k + 1)}
-          />
-        </div>
-      </div>
+      <Dictation
+        patient={view.patient}
+        existing={view.existing}
+        onBack={() => {
+          setRefreshKey((k) => k + 1);
+          setView({ name: "library" });
+        }}
+        onSaved={() => setRefreshKey((k) => k + 1)}
+      />
     );
   }
 
   return (
     <Library
       refreshKey={refreshKey}
-      onLogout={logout}
+      onLogout={() => setView({ name: "login" })}
       onOpen={(patient, existing) =>
         setView({ name: "dictation", patient, existing })
       }

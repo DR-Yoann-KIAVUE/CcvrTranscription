@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { authIsConfigured, authSetup, authVerify } from "../api";
+import { LogoMark } from "../components/Logo";
 
 export default function Login({ onSuccess }: { onSuccess: () => void }) {
   const [configured, setConfigured] = useState<boolean | null>(null);
@@ -22,16 +23,14 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
       if (configured) {
         const ok = await authVerify(password);
         if (ok) onSuccess();
-        else setError("Mot de passe incorrect.");
+        else setError("Mot de passe incorrect. Réessayez.");
+      } else if (password.length < 8) {
+        setError("Le mot de passe doit contenir au moins 8 caractères.");
+      } else if (password !== confirm) {
+        setError("Les mots de passe ne correspondent pas.");
       } else {
-        if (password.length < 4) {
-          setError("Le mot de passe doit contenir au moins 4 caractères.");
-        } else if (password !== confirm) {
-          setError("Les mots de passe ne correspondent pas.");
-        } else {
-          await authSetup(password);
-          onSuccess();
-        }
+        await authSetup(password);
+        onSuccess();
       }
     } catch (err) {
       setError(String(err));
@@ -42,65 +41,66 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
 
   return (
     <div className="login-wrap">
-      <form className="login-card" onSubmit={submit}>
-        <div className="login-logo" aria-hidden="true">
-          <svg
-            viewBox="0 0 24 24"
-            width="24"
-            height="24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <rect x="9" y="2" width="6" height="12" rx="3" />
-            <path d="M5 11a7 7 0 0 0 14 0" />
-            <line x1="12" y1="18" x2="12" y2="22" />
-          </svg>
-        </div>
-        <h1>Dictée médicale</h1>
-        <p>
-          {configured === null
-            ? "Chargement…"
-            : configured
-            ? "Saisissez votre mot de passe local"
-            : "Créez votre mot de passe local"}
-        </p>
+      <div className="login-brand">
+        <LogoMark />
+        <h1>CCVR Dictée</h1>
+        <div className="sub">Clinique Cardiovasculaire Raphaëloise</div>
+      </div>
 
-        <input
-          type="password"
-          placeholder="Mot de passe"
-          value={password}
-          autoFocus
-          onChange={(e) => setPassword(e.target.value)}
-          disabled={busy || configured === null}
-        />
-        {configured === false && (
+      <form className="login-card" onSubmit={submit}>
+        {configured === null ? (
+          <h2>Chargement…</h2>
+        ) : configured ? (
+          <h2>Bonjour, Dr Kiavué</h2>
+        ) : (
+          <>
+            <h2>Créer votre mot de passe</h2>
+            <p className="intro">
+              Il protège vos comptes-rendus sur cet ordinateur. Choisissez un
+              mot de passe que vous retiendrez : il n'est pas récupérable.
+            </p>
+          </>
+        )}
+
+        <div className="field">
+          <label>Mot de passe</label>
           <input
             type="password"
-            placeholder="Confirmer le mot de passe"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            disabled={busy}
+            placeholder={configured ? "" : "8 caractères minimum"}
+            value={password}
+            autoFocus
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={busy || configured === null}
           />
+        </div>
+
+        {configured === false && (
+          <div className="field">
+            <label>Confirmer</label>
+            <input
+              type="password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              disabled={busy}
+            />
+          </div>
         )}
 
         <div className="error">{error}</div>
 
         <button className="primary" type="submit" disabled={busy || !password}>
-          {configured === false ? "Créer et entrer" : "Déverrouiller"}
+          {configured === false ? "Créer et ouvrir" : "Déverrouiller"}
         </button>
-        <div className="disclaimer">
-          <strong>Données de santé, stockage 100 % local.</strong>
-          <span>
-            Pour des raisons de réglementation et de sécurité, toutes les données
-            restent sur cet ordinateur : aucune sauvegarde automatique, aucun
-            envoi vers le cloud. Pensez à <strong>exporter vos comptes-rendus
-            (PDF / DOCX)</strong> pour les conserver et les sauvegarder ailleurs.
-          </span>
-        </div>
       </form>
+
+      <div className="login-note">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="3" y="11" width="18" height="11" rx="2" />
+          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+        </svg>
+        Toutes vos données restent sur cet ordinateur. Aucune connexion internet
+        requise.
+      </div>
     </div>
   );
 }
