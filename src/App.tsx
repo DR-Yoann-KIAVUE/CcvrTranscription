@@ -3,6 +3,7 @@ import Login from "./screens/Login";
 import Library from "./screens/Library";
 import Dictation from "./screens/Dictation";
 import { UpdateBanner } from "./components/UpdateBanner";
+import { VersionBadge } from "./components/VersionBadge";
 import type { CompteRendu, Patient } from "./types";
 
 type View =
@@ -45,6 +46,7 @@ export default function App() {
     <>
       {screen}
       <UpdateBanner />
+      <VersionBadge />
     </>
   );
 }

@@ -902,6 +902,19 @@ input.invalid {
   margin-top: 10px;
 }
 
+/* ============ Version (bas à gauche) ============ */
+.version-badge {
+  position: fixed;
+  left: 12px;
+  bottom: 9px;
+  z-index: 40;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-soft);
+  pointer-events: none;
+  user-select: none;
+}
+
 /* ============ Bannière de mise à jour ============ */
 .update-banner {
   position: fixed;
