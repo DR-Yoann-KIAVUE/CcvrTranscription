@@ -14,10 +14,11 @@ import { formatDate } from "../format";
 
 interface Props {
   onOpen: (patient: Patient, existing: CompteRendu | null) => void;
+  onLogout: () => void;
   refreshKey: number;
 }
 
-export default function Library({ onOpen, refreshKey }: Props) {
+export default function Library({ onOpen, onLogout, refreshKey }: Props) {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [patientQuery, setPatientQuery] = useState("");
   const [selected, setSelected] = useState<Patient | null>(null);
@@ -123,7 +124,23 @@ export default function Library({ onOpen, refreshKey }: Props) {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="sidebar-header">
-          <h2>🩺 Patients</h2>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <h2 style={{ marginBottom: 12 }}>🩺 Patients</h2>
+            <button
+              className="ghost"
+              title="Verrouiller et changer d'utilisateur"
+              onClick={onLogout}
+              style={{ marginBottom: 12 }}
+            >
+              🔒 Verrouiller
+            </button>
+          </div>
           <input
             placeholder="Rechercher un patient…"
             value={patientQuery}

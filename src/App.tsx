@@ -13,6 +13,8 @@ export default function App() {
   const [view, setView] = useState<View>({ name: "login" });
   const [refreshKey, setRefreshKey] = useState(0);
 
+  const logout = () => setView({ name: "login" });
+
   if (view.name === "login") {
     return <Login onSuccess={() => setView({ name: "library" })} />;
   }
@@ -38,6 +40,7 @@ export default function App() {
   return (
     <Library
       refreshKey={refreshKey}
+      onLogout={logout}
       onOpen={(patient, existing) =>
         setView({ name: "dictation", patient, existing })
       }

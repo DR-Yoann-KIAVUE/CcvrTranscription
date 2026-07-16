@@ -131,6 +131,23 @@ textarea:focus {
   min-height: 18px;
   margin: 4px 0;
 }
+.disclaimer {
+  margin-top: 20px;
+  padding: 12px 14px;
+  background: var(--accent-soft);
+  border: 1px solid #cfe4e0;
+  border-radius: 8px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.disclaimer strong {
+  color: var(--text);
+}
 
 /* ---- Layout appli ---- */
 .app-shell {

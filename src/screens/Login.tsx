@@ -76,9 +76,15 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
         <button className="primary" type="submit" disabled={busy || !password}>
           {configured === false ? "Créer et entrer" : "Déverrouiller"}
         </button>
-        <p style={{ marginTop: 16, fontSize: 11 }}>
-          Toutes les données restent sur cet ordinateur.
-        </p>
+        <div className="disclaimer">
+          <strong>🔒 Données de santé — stockage 100 % local.</strong>
+          <span>
+            Pour des raisons de réglementation et de sécurité, toutes les données
+            restent sur cet ordinateur : aucune sauvegarde automatique, aucun
+            envoi vers le cloud. Pensez à <strong>exporter vos comptes-rendus
+            (PDF / DOCX)</strong> pour les conserver et les sauvegarder ailleurs.
+          </span>
+        </div>
       </form>
     </div>
   );
