@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   createCompteRendu,
   exportDocuments,
   modelPresent,
   modelsDirPath,
-  readAudio,
   saveRecording,
   transcribe,
   updateCompteRendu,
@@ -108,11 +108,12 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
   const replay = async () => {
     if (!audioPath) return;
     try {
-      const buf = await readAudio(audioPath);
-      const blob = new Blob([buf], { type: "audio/wav" });
-      const url = URL.createObjectURL(blob);
+      // Lecture via le protocole asset de Tauri (fiable dans WKWebView/WebView2,
+      // contrairement à un blob:).
+      const src = convertFileSrc(audioPath);
       if (!audioElRef.current) audioElRef.current = new Audio();
-      audioElRef.current.src = url;
+      audioElRef.current.src = src;
+      audioElRef.current.load();
       await audioElRef.current.play();
     } catch (e) {
       setStatus({ kind: "error", msg: "Réécoute impossible : " + String(e) });
@@ -135,7 +136,13 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
       const pdf = buildPdf(html, meta);
       const docx = await buildDocx(html, meta);
       const base = `${patient.nom}_${dateConsult}_${titre}`.replace(/\s+/g, "-");
-      const paths = await exportDocuments({ dir, baseName: base, pdf, docx });
+      const paths = await exportDocuments({
+        dir,
+        baseName: base,
+        pdf,
+        docx,
+        audio: audioPath,
+      });
       setStatus({
         kind: "done",
         msg: "Exporté : " + paths.map((p) => p.split(/[\\/]/).pop()).join(", "),
@@ -224,7 +231,7 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
           💾 Enregistrer
         </button>
         <button onClick={download} disabled={!hasContent}>
-          ⬇ Télécharger (PDF + DOCX)
+          ⬇ Télécharger (PDF + DOCX{audioPath ? " + audio" : ""})
         </button>
       </div>
     </div>

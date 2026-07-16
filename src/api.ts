@@ -86,10 +86,12 @@ export const exportDocuments = (args: {
   baseName: string;
   pdf: Uint8Array;
   docx: Uint8Array;
+  audio: string | null;
 }) =>
   invoke<string[]>("export_documents", {
     dir: args.dir,
     baseName: args.baseName,
     pdf: Array.from(args.pdf),
     docx: Array.from(args.docx),
+    audio: args.audio,
   });

@@ -264,13 +264,15 @@ async fn transcribe(app: AppHandle, path: String) -> Result<String, String> {
 
 // ---------- Commande : export ----------
 
-/// Écrit les fichiers PDF et DOCX dans le dossier choisi. Renvoie les chemins créés.
+/// Écrit les fichiers PDF et DOCX (et copie l'audio WAV si fourni) dans le
+/// dossier choisi. Renvoie les chemins créés.
 #[tauri::command]
 fn export_documents(
     dir: String,
     base_name: String,
     pdf: Vec<u8>,
     docx: Vec<u8>,
+    audio: Option<String>,
 ) -> Result<Vec<String>, String> {
     let base: String = base_name
         .chars()
@@ -284,10 +286,22 @@ fn export_documents(
     let docx_path = dir_path.join(format!("{base}.docx"));
     fs::write(&pdf_path, &pdf).map_err(|e| e.to_string())?;
     fs::write(&docx_path, &docx).map_err(|e| e.to_string())?;
-    Ok(vec![
+
+    let mut created = vec![
         pdf_path.display().to_string(),
         docx_path.display().to_string(),
-    ])
+    ];
+
+    // Copie l'enregistrement audio à côté des documents, s'il existe.
+    if let Some(src) = audio {
+        if !src.is_empty() && PathBuf::from(&src).exists() {
+            let wav_path = dir_path.join(format!("{base}.wav"));
+            fs::copy(&src, &wav_path).map_err(|e| e.to_string())?;
+            created.push(wav_path.display().to_string());
+        }
+    }
+
+    Ok(created)
 }
 
 // ---------- Point d'entrée ----------
