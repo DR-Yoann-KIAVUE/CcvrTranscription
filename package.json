@@ -1,6 +1,6 @@
 {
   "name": "ccvr-transcription",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Dictée médicale locale — transcription Whisper hors-ligne",
   "type": "module",
   "private": true,
