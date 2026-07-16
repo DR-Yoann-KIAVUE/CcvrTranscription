@@ -900,3 +900,39 @@ input.invalid {
   color: var(--text-soft);
   margin-top: 10px;
 }
+
+/* ============ Bannière de mise à jour ============ */
+.update-banner {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--text);
+  color: #fff;
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
+  max-width: 360px;
+}
+.update-banner .ub-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+.update-banner .ub-sub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--dark-text-muted);
+  margin-top: 2px;
+}
+.update-banner button.primary {
+  background: #fff;
+  border-color: #fff;
+  color: var(--text);
+}
+.update-banner button.primary:hover:not(:disabled) {
+  background: #e6e6e6;
+  border-color: #e6e6e6;
+}

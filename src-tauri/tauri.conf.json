@@ -29,8 +29,17 @@
       "csp": "default-src 'self'; img-src 'self' data: blob: asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; media-src 'self' blob: asset: http://asset.localhost"
     }
   },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/soraisv2/ccvr-dictee-releases/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI3OUE0OTYwRTMyQjE1QkQKUldTOUZTdmpZRW1hdDM0ZldZTmZ3R292RVo1UWVZT2tZdkV0NHd2R3Q3bk5odGwwNW9aZ1IvdHAK"
+    }
+  },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": ["dmg", "nsis", "msi"],
     "icon": [
       "icons/32x32.png",

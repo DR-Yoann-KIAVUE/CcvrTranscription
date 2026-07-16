@@ -2,6 +2,7 @@ import { useState } from "react";
 import Login from "./screens/Login";
 import Library from "./screens/Library";
 import Dictation from "./screens/Dictation";
+import { UpdateBanner } from "./components/UpdateBanner";
 import type { CompteRendu, Patient } from "./types";
 
 type View =
@@ -13,12 +14,11 @@ export default function App() {
   const [view, setView] = useState<View>({ name: "login" });
   const [refreshKey, setRefreshKey] = useState(0);
 
+  let screen;
   if (view.name === "login") {
-    return <Login onSuccess={() => setView({ name: "library" })} />;
-  }
-
-  if (view.name === "dictation") {
-    return (
+    screen = <Login onSuccess={() => setView({ name: "library" })} />;
+  } else if (view.name === "dictation") {
+    screen = (
       <Dictation
         patient={view.patient}
         existing={view.existing}
@@ -29,15 +29,22 @@ export default function App() {
         onSaved={() => setRefreshKey((k) => k + 1)}
       />
     );
+  } else {
+    screen = (
+      <Library
+        refreshKey={refreshKey}
+        onLogout={() => setView({ name: "login" })}
+        onOpen={(patient, existing) =>
+          setView({ name: "dictation", patient, existing })
+        }
+      />
+    );
   }
 
   return (
-    <Library
-      refreshKey={refreshKey}
-      onLogout={() => setView({ name: "login" })}
-      onOpen={(patient, existing) =>
-        setView({ name: "dictation", patient, existing })
-      }
-    />
+    <>
+      {screen}
+      <UpdateBanner />
+    </>
   );
 }
