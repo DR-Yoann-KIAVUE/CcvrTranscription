@@ -46,28 +46,57 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
     }
   };
 
+  const placeCaretAfter = (node: Node) => {
+    const sel = window.getSelection();
+    if (!sel) return;
+    const r = document.createRange();
+    r.selectNodeContents(node);
+    r.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(r);
+    savedRange.current = r.cloneRange();
+  };
+
   useImperativeHandle(ref, () => ({
     insertHtml: (html: string) => {
       const el = elRef.current;
       if (!el) return;
-      el.focus();
-      const sel = window.getSelection();
-      if (sel) {
-        sel.removeAllRanges();
-        if (
-          savedRange.current &&
-          el.contains(savedRange.current.commonAncestorContainer)
-        ) {
-          sel.addRange(savedRange.current);
-        } else {
-          const r = document.createRange();
-          r.selectNodeContents(el);
-          r.collapse(false); // fin du contenu
-          sel.addRange(r);
-        }
+
+      // Construit les blocs à insérer (paragraphes issus du nettoyage).
+      const tmp = document.createElement("div");
+      tmp.innerHTML = html;
+      const newNodes = Array.from(tmp.childNodes);
+      if (newNodes.length === 0) return;
+
+      // Trouve le bloc cible : l'enfant direct de l'éditeur contenant le curseur.
+      let anchor: ChildNode | null = null;
+      const r = savedRange.current;
+      if (r && el.contains(r.commonAncestorContainer)) {
+        let n: Node | null = r.startContainer;
+        while (n && n.parentNode !== el) n = n.parentNode;
+        if (n && n.parentNode === el) anchor = n as ChildNode;
       }
-      document.execCommand("insertHTML", false, html);
-      saveSelection();
+
+      let last: Node;
+      if (anchor) {
+        const isHeading = /^H[1-3]$/.test((anchor as HTMLElement).tagName ?? "");
+        const isEmpty = (anchor.textContent ?? "").trim() === "";
+        // Insère les nouveaux paragraphes juste après la section/ligne courante.
+        let refNode: ChildNode = anchor;
+        for (const node of newNodes) {
+          (refNode as ChildNode).after(node);
+          refNode = node as ChildNode;
+        }
+        last = refNode;
+        // Si on a cliqué sur une ligne vide (pas un titre), on la retire.
+        if (isEmpty && !isHeading) anchor.remove();
+      } else {
+        // Aucun curseur mémorisé : ajout propre en fin de document.
+        for (const node of newNodes) el.appendChild(node);
+        last = el.lastChild as Node;
+      }
+
+      placeCaretAfter(last);
       emit();
     },
   }));

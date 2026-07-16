@@ -478,9 +478,19 @@ select:focus {
 }
 .editor h1 {
   font-size: 22px;
+  margin: 12px 0 6px;
 }
 .editor h2 {
-  font-size: 18px;
+  font-size: 17px;
+  margin: 14px 0 4px;
+  color: var(--text);
+}
+.editor p {
+  margin: 6px 0;
+}
+/* Les lignes vides (sections de trame) restent cliquables et espacées. */
+.editor p:empty {
+  min-height: 1.4em;
 }
 .editor:empty:before {
   content: attr(data-placeholder);
