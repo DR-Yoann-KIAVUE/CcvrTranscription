@@ -144,6 +144,7 @@ export default function Library({ onOpen, onLogout, refreshKey }: Props) {
         <span className="logo">
           <LogoMark />
           <span className="wordmark">CCVR Dictée</span>
+          <span className="appbar-sub">Cabinet du Dr Kiavué</span>
         </span>
         <div className="search">
           <input

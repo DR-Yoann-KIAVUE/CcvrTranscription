@@ -214,6 +214,14 @@ input.invalid {
   font-weight: 600;
   letter-spacing: -0.01em;
 }
+.appbar-sub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-soft);
+  padding-left: 10px;
+  margin-left: 4px;
+  border-left: 1px solid var(--border-strong);
+}
 
 /* ============ Écran 1 · Connexion ============ */
 .login-wrap {
