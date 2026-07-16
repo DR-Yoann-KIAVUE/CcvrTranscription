@@ -37,7 +37,8 @@ PLATFORM="darwin-$ARCH"
 echo "Version $VERSION · $PLATFORM"
 
 # --- Build signé ---
-export TAURI_SIGNING_PRIVATE_KEY_PATH="$KEY_PATH"
+# Tauri v2 attend le CONTENU de la clé dans TAURI_SIGNING_PRIVATE_KEY.
+export TAURI_SIGNING_PRIVATE_KEY="$(cat "$KEY_PATH")"
 export TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
 echo "Build en cours (peut être long)…"
 npm run app:build
