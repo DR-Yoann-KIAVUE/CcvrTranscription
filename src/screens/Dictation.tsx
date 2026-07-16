@@ -22,7 +22,7 @@ import { buildDocx } from "../export/docx";
 import { buildPdf } from "../export/pdf";
 import { blocksToPlainText, parseEditorHtml } from "../export/parse";
 import Recorder from "./Recorder";
-import Editor from "./Editor";
+import Editor, { type EditorHandle } from "./Editor";
 
 interface Props {
   patient: Patient;
@@ -65,6 +65,7 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
   const [versions, setVersions] = useState<CrVersion[]>([]);
   const audioElRef = useRef<HTMLAudioElement | null>(null);
   const originRef = useRef<Origine>("edition");
+  const editorRef = useRef<EditorHandle>(null);
 
   useEffect(() => {
     modelPresent().then(setModelOk).catch(() => setModelOk(false));
@@ -112,20 +113,30 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
     }
   };
 
-  const runTranscription = async (path: string, origine: Origine) => {
+  const transcribeInto = async (
+    path: string,
+    origine: Origine,
+    mode: "insert" | "replace"
+  ) => {
     setStatus({
       kind: "working",
       msg: "Transcription Whisper en cours (cela peut prendre un moment)…",
     });
     const text = await transcribe(path);
     const cleaned = cleanTranscript(text);
+    if (mode === "replace") {
+      setEditorHtml(cleaned);
+    } else if (text) {
+      // Insère au curseur (dans la section choisie) sans écraser la trame.
+      editorRef.current?.insertHtml(cleaned);
+    }
+    // Placé après la mutation : insertHtml déclenche onChange qui remet 'edition'.
     originRef.current = origine;
-    setEditorHtml(cleaned);
     setDirty(true);
     setStatus({
       kind: text ? "done" : "error",
       msg: text
-        ? "Transcription terminée. Relisez et corrigez si besoin, puis enregistrez."
+        ? "Transcription insérée. Relisez, corrigez si besoin, puis enregistrez."
         : "Transcription vide, vérifiez le micro et réessayez.",
     });
   };
@@ -136,7 +147,7 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
       const name = `p${patient.id}-${Date.now()}`;
       const path = await saveRecording(result.wav, name);
       setAudioPath(path);
-      await runTranscription(path, "transcription");
+      await transcribeInto(path, "transcription", "insert");
     } catch (e) {
       setStatus({ kind: "error", msg: String(e) });
     }
@@ -152,7 +163,7 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
     )
       return;
     try {
-      await runTranscription(audioPath, "regeneration");
+      await transcribeInto(audioPath, "regeneration", "replace");
     } catch (e) {
       setStatus({ kind: "error", msg: String(e) });
     }
@@ -394,6 +405,7 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
       {/* Éditeur */}
       <Editor
         key={editorKey}
+        ref={editorRef}
         initialHtml={html}
         onChange={(h) => {
           setHtml(h);
