@@ -914,6 +914,9 @@ input.invalid {
   pointer-events: none;
   user-select: none;
 }
+.version-badge .vb-ok {
+  color: var(--accent-text);
+}
 
 /* ============ Bannière de mise à jour ============ */
 .update-banner {

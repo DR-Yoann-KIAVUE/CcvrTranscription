@@ -4,6 +4,7 @@ import Library from "./screens/Library";
 import Dictation from "./screens/Dictation";
 import { UpdateBanner } from "./components/UpdateBanner";
 import { VersionBadge } from "./components/VersionBadge";
+import { useUpdater } from "./hooks/useUpdater";
 import type { CompteRendu, Patient } from "./types";
 
 type View =
@@ -14,6 +15,7 @@ type View =
 export default function App() {
   const [view, setView] = useState<View>({ name: "login" });
   const [refreshKey, setRefreshKey] = useState(0);
+  const updater = useUpdater();
 
   let screen;
   if (view.name === "login") {
@@ -45,8 +47,13 @@ export default function App() {
   return (
     <>
       {screen}
-      <UpdateBanner />
-      <VersionBadge />
+      <UpdateBanner
+        update={updater.update}
+        phase={updater.phase}
+        msg={updater.msg}
+        install={updater.install}
+      />
+      <VersionBadge upToDate={updater.upToDate} />
     </>
   );
 }
