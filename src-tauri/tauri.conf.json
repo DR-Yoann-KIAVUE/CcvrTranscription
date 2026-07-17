@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Dictée médicale",
+  "productName": "med_stt",
   "version": "0.1.4",
   "identifier": "com.drkiavueyoann.dictee",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Dictée médicale",
+        "title": "med_stt",
         "width": 1200,
         "height": 820,
         "minWidth": 900,
