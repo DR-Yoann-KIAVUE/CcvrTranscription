@@ -7,7 +7,7 @@ renvoyer un `.dmg` à chaque fois.
 ## Principe
 
 - **Code source** : dépôt **privé** (ex. `soraisv2/ccvr-dictee`). Personne ne le voit.
-- **Releases** : dépôt **public** dédié (`soraisv2/ccvr-dictee-releases`) qui ne
+- **Releases** : dépôt **public** dédié (`DR-Yoann-KIAVUE/ccvr-dictee-releases`) qui ne
   contient **que** les binaires compilés + `latest.json`. Aucune source, aucune
   donnée patient, aucun secret.
 - L'app interroge `latest.json` au lancement. Si une version plus récente
@@ -28,7 +28,7 @@ renvoyer un `.dmg` à chaque fois.
    être signées. La clé publique est déjà dans `src-tauri/tauri.conf.json`.
 2. **Créer le dépôt public de releases** (une fois) :
    ```bash
-   gh repo create soraisv2/ccvr-dictee-releases --public \
+   gh repo create DR-Yoann-KIAVUE/ccvr-dictee-releases --public \
      --description "Releases CCVR Dictée (binaires uniquement)"
    ```
    (Aucune source n'y est poussée : seulement les fichiers de release.)
