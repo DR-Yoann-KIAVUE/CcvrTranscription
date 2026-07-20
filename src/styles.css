@@ -116,8 +116,12 @@
   #root {
     height: 100%;
   }
+  html {
+    @apply bg-background text-foreground;
+  }
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply text-foreground antialiased;
+    background: transparent;
     user-select: none;
   }
   input,

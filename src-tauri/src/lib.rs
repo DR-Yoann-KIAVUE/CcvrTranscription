@@ -300,6 +300,97 @@ fn copy_file(src: String, dest: String) -> Result<String, String> {
     Ok(dest)
 }
 
+// ---------- Commandes : données / sauvegarde ----------
+
+#[derive(serde::Serialize)]
+struct DataStats {
+    dir: String,
+    patients: i64,
+    comptes_rendus: i64,
+    versions: i64,
+    audio_count: u64,
+    db_bytes: u64,
+    audio_bytes: u64,
+}
+
+#[tauri::command]
+fn data_stats(app: AppHandle, state: State<AppState>) -> Result<DataStats, String> {
+    let dir = data_dir(&app)?;
+    let (patients, comptes_rendus, versions) = {
+        let conn = state.db.lock().map_err(|_| "verrou DB")?;
+        let count = |sql: &str| conn.query_row(sql, [], |r| r.get::<_, i64>(0)).unwrap_or(0);
+        (
+            count("SELECT COUNT(*) FROM patients"),
+            count("SELECT COUNT(*) FROM comptes_rendus"),
+            count("SELECT COUNT(*) FROM cr_versions"),
+        )
+    };
+    let db_bytes = fs::metadata(dir.join("dictee.db")).map(|m| m.len()).unwrap_or(0);
+    let (mut audio_count, mut audio_bytes) = (0u64, 0u64);
+    if let Ok(rd) = fs::read_dir(dir.join("audio")) {
+        for e in rd.flatten() {
+            if let Ok(m) = e.metadata() {
+                if m.is_file() {
+                    audio_count += 1;
+                    audio_bytes += m.len();
+                }
+            }
+        }
+    }
+    Ok(DataStats {
+        dir: dir.display().to_string(),
+        patients,
+        comptes_rendus,
+        versions,
+        audio_count,
+        db_bytes,
+        audio_bytes,
+    })
+}
+
+/// Sauvegarde complète : copie cohérente de la base + tous les audios vers un
+/// sous-dossier du dossier choisi. Renvoie le chemin de la sauvegarde.
+#[tauri::command]
+fn backup_data(
+    app: AppHandle,
+    state: State<AppState>,
+    dest_dir: String,
+    folder_name: String,
+) -> Result<String, String> {
+    let safe: String = folder_name
+        .chars()
+        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        .collect();
+    let out = PathBuf::from(&dest_dir).join(if safe.is_empty() { "ccvr-sauvegarde".into() } else { safe });
+    fs::create_dir_all(&out).map_err(|e| e.to_string())?;
+
+    // Copie cohérente de la base via VACUUM INTO (inclut les données du WAL).
+    let db_out = out.join("dictee.db");
+    let _ = fs::remove_file(&db_out);
+    {
+        let conn = state.db.lock().map_err(|_| "verrou DB")?;
+        conn.execute("VACUUM INTO ?1", [db_out.to_str().ok_or("chemin invalide")?])
+            .map_err(|e| e.to_string())?;
+    }
+
+    // Copie des fichiers audio.
+    let audio_src = audio_dir(&app)?;
+    let audio_dst = out.join("audio");
+    fs::create_dir_all(&audio_dst).map_err(|e| e.to_string())?;
+    if let Ok(rd) = fs::read_dir(&audio_src) {
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.is_file() {
+                if let Some(name) = p.file_name() {
+                    let _ = fs::copy(&p, audio_dst.join(name));
+                }
+            }
+        }
+    }
+
+    Ok(out.display().to_string())
+}
+
 // ---------- Point d'entrée ----------
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -341,6 +432,8 @@ pub fn run() {
             transcribe,
             save_bytes,
             copy_file,
+            data_stats,
+            backup_data,
         ])
         .run(tauri::generate_context!())
         .expect("erreur au lancement de l'application Tauri");

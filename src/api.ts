@@ -92,3 +92,17 @@ export const saveBytes = (path: string, bytes: Uint8Array) =>
   invoke<string>("save_bytes", { path, bytes: Array.from(bytes) });
 export const copyFile = (src: string, dest: string) =>
   invoke<string>("copy_file", { src, dest });
+
+// ---- Données / sauvegarde ----
+export interface DataStats {
+  dir: string;
+  patients: number;
+  comptes_rendus: number;
+  versions: number;
+  audio_count: number;
+  db_bytes: number;
+  audio_bytes: number;
+}
+export const dataStats = () => invoke<DataStats>("data_stats");
+export const backupData = (destDir: string, folderName: string) =>
+  invoke<string>("backup_data", { destDir, folderName });

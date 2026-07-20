@@ -14,6 +14,7 @@ import type { CompteRendu, Patient, SearchHit } from "../types";
 import { formatDate } from "../format";
 import { reportTypeLabel } from "../reportTypes";
 import { LogoMark } from "@/components/Logo";
+import { DataDialog } from "@/components/DataDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -25,7 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { Lock, Plus, Search } from "lucide-react";
+import { Database, Lock, Plus, Search } from "lucide-react";
 
 interface Props {
   onOpen: (patient: Patient, existing: CompteRendu | null) => void;
@@ -45,6 +46,7 @@ export default function Library({ onOpen, onLogout, refreshKey }: Props) {
   const [newName, setNewName] = useState("");
   const [newDob, setNewDob] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [dataOpen, setDataOpen] = useState(false);
 
   const loadPatients = useCallback(async () => {
     try {
@@ -149,7 +151,7 @@ export default function Library({ onOpen, onLogout, refreshKey }: Props) {
   return (
     <div className="flex h-screen flex-col">
       {/* Barre d'application */}
-      <header className="flex items-center gap-4 border-b bg-background px-5 py-2.5">
+      <header className="flex items-center gap-4 border-b bg-background/75 px-5 py-2.5 backdrop-blur">
         <span className="flex items-center gap-2 text-foreground">
           <LogoMark className="size-5 text-primary" />
           <span className="font-semibold tracking-tight">CCVR Dictée</span>
@@ -169,6 +171,9 @@ export default function Library({ onOpen, onLogout, refreshKey }: Props) {
         <div className="flex-1" />
         <Button onClick={() => setPickerOpen(true)}>
           <Plus className="size-4" /> Nouvelle dictée
+        </Button>
+        <Button variant="ghost" onClick={() => setDataOpen(true)}>
+          <Database className="size-4" /> Données
         </Button>
         <Button variant="ghost" onClick={onLogout}>
           <Lock className="size-4" /> Verrouiller
@@ -282,6 +287,8 @@ export default function Library({ onOpen, onLogout, refreshKey }: Props) {
           onOpen(p, null);
         }}
       />
+
+      <DataDialog open={dataOpen} onOpenChange={setDataOpen} />
     </div>
   );
 }

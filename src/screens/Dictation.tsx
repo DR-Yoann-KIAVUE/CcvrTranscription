@@ -313,7 +313,7 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
   return (
     <div className="flex h-screen flex-col">
       {/* Bandeau document */}
-      <header className="flex items-center gap-3 border-b bg-background px-5 py-2.5">
+      <header className="flex items-center gap-3 border-b bg-background/75 px-5 py-2.5 backdrop-blur">
         <Button variant="ghost" size="sm" onClick={onBack}>
           <ArrowLeft className="size-4" /> Bibliothèque
         </Button>

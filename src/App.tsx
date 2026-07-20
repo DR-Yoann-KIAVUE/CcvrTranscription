@@ -4,6 +4,7 @@ import Library from "./screens/Library";
 import Dictation from "./screens/Dictation";
 import { UpdateBanner } from "./components/UpdateBanner";
 import { VersionBadge } from "./components/VersionBadge";
+import { DitherBackground } from "./components/DitherBackground";
 import { useUpdater } from "./hooks/useUpdater";
 import { Toaster } from "@/components/ui/sonner";
 import type { CompteRendu, Patient } from "./types";
@@ -47,7 +48,8 @@ export default function App() {
 
   return (
     <>
-      {screen}
+      <DitherBackground />
+      <div className="relative z-10 h-full">{screen}</div>
       <UpdateBanner
         update={updater.update}
         phase={updater.phase}
