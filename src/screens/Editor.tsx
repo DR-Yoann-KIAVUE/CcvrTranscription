@@ -1,9 +1,6 @@
-import {
-  forwardRef,
-  useEffect,
-  useImperativeHandle,
-  useRef,
-} from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import { Button } from "@/components/ui/button";
+import { Bold, Heading1, Heading2, List, Pilcrow } from "lucide-react";
 
 interface Props {
   initialHtml: string;
@@ -11,11 +8,9 @@ interface Props {
 }
 
 export interface EditorHandle {
-  /** Insère du HTML à la position du curseur (ou en fin si aucun curseur). */
   insertHtml: (html: string) => void;
 }
 
-/** Éditeur riche minimal basé sur contentEditable + execCommand. */
 const Editor = forwardRef<EditorHandle, Props>(function Editor(
   { initialHtml, onChange },
   ref
@@ -25,8 +20,6 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
 
   useEffect(() => {
     if (elRef.current) elRef.current.innerHTML = initialHtml || "";
-    // Le parent remonte l'éditeur (via key) quand il remplace tout le contenu ;
-    // on ne resynchronise pas à chaque frappe pour préserver le curseur.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -34,8 +27,6 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
     if (elRef.current) onChange(elRef.current.innerHTML);
   };
 
-  // Mémorise la position du curseur tant qu'il est dans l'éditeur, afin de
-  // pouvoir y insérer la transcription même après avoir cliqué ailleurs.
   const saveSelection = () => {
     const sel = window.getSelection();
     if (sel && sel.rangeCount > 0 && elRef.current) {
@@ -61,14 +52,11 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
     insertHtml: (html: string) => {
       const el = elRef.current;
       if (!el) return;
-
-      // Construit les blocs à insérer (paragraphes issus du nettoyage).
       const tmp = document.createElement("div");
       tmp.innerHTML = html;
       const newNodes = Array.from(tmp.childNodes);
       if (newNodes.length === 0) return;
 
-      // Trouve le bloc cible : l'enfant direct de l'éditeur contenant le curseur.
       let anchor: ChildNode | null = null;
       const r = savedRange.current;
       if (r && el.contains(r.commonAncestorContainer)) {
@@ -81,21 +69,17 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
       if (anchor) {
         const isHeading = /^H[1-3]$/.test((anchor as HTMLElement).tagName ?? "");
         const isEmpty = (anchor.textContent ?? "").trim() === "";
-        // Insère les nouveaux paragraphes juste après la section/ligne courante.
         let refNode: ChildNode = anchor;
         for (const node of newNodes) {
           (refNode as ChildNode).after(node);
           refNode = node as ChildNode;
         }
         last = refNode;
-        // Si on a cliqué sur une ligne vide (pas un titre), on la retire.
         if (isEmpty && !isHeading) anchor.remove();
       } else {
-        // Aucun curseur mémorisé : ajout propre en fin de document.
         for (const node of newNodes) el.appendChild(node);
         last = el.lastChild as Node;
       }
-
       placeCaretAfter(last);
       emit();
     },
@@ -107,44 +91,30 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
     emit();
   };
 
+  const md = (e: React.MouseEvent) => e.preventDefault();
+
   return (
     <div>
-      <div className="editor-toolbar">
-        <button title="Gras" onMouseDown={(e) => e.preventDefault()} onClick={() => cmd("bold")}>
-          <b>G</b>
-        </button>
-        <button
-          title="Titre"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => cmd("formatBlock", "H1")}
-        >
-          T1
-        </button>
-        <button
-          title="Sous-titre"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => cmd("formatBlock", "H2")}
-        >
-          T2
-        </button>
-        <button
-          title="Paragraphe normal"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => cmd("formatBlock", "P")}
-        >
-          ¶
-        </button>
-        <button
-          title="Liste à puces"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => cmd("insertUnorderedList")}
-        >
-          Liste
-        </button>
+      <div className="mb-2 flex gap-1">
+        <Button variant="outline" size="icon" className="size-8" title="Gras" onMouseDown={md} onClick={() => cmd("bold")}>
+          <Bold className="size-4" />
+        </Button>
+        <Button variant="outline" size="icon" className="size-8" title="Titre" onMouseDown={md} onClick={() => cmd("formatBlock", "H1")}>
+          <Heading1 className="size-4" />
+        </Button>
+        <Button variant="outline" size="icon" className="size-8" title="Sous-titre" onMouseDown={md} onClick={() => cmd("formatBlock", "H2")}>
+          <Heading2 className="size-4" />
+        </Button>
+        <Button variant="outline" size="icon" className="size-8" title="Paragraphe" onMouseDown={md} onClick={() => cmd("formatBlock", "P")}>
+          <Pilcrow className="size-4" />
+        </Button>
+        <Button variant="outline" size="icon" className="size-8" title="Liste à puces" onMouseDown={md} onClick={() => cmd("insertUnorderedList")}>
+          <List className="size-4" />
+        </Button>
       </div>
       <div
         ref={elRef}
-        className="editor"
+        className="cr-content min-h-[420px] overflow-y-auto rounded-lg border bg-card px-6 py-5 shadow-xs outline-none focus:ring-2 focus:ring-ring/40"
         contentEditable
         suppressContentEditableWarning
         data-placeholder="Le compte-rendu apparaîtra ici après la transcription. Vous pouvez le relire et le corriger."

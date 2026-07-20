@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 
-// Affiche en permanence la version de l'application en bas à gauche.
 export function VersionBadge({ upToDate }: { upToDate?: boolean }) {
   const [version, setVersion] = useState("");
 
@@ -13,9 +12,9 @@ export function VersionBadge({ upToDate }: { upToDate?: boolean }) {
 
   if (!version) return null;
   return (
-    <div className="version-badge">
+    <div className="pointer-events-none fixed bottom-2 left-3 z-40 select-none font-mono text-[11px] text-muted-foreground">
       v{version}
-      {upToDate && <span className="vb-ok"> · à jour</span>}
+      {upToDate && <span className="text-success"> · à jour</span>}
     </div>
   );
 }

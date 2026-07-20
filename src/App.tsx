@@ -5,6 +5,7 @@ import Dictation from "./screens/Dictation";
 import { UpdateBanner } from "./components/UpdateBanner";
 import { VersionBadge } from "./components/VersionBadge";
 import { useUpdater } from "./hooks/useUpdater";
+import { Toaster } from "@/components/ui/sonner";
 import type { CompteRendu, Patient } from "./types";
 
 type View =
@@ -54,6 +55,7 @@ export default function App() {
         install={updater.install}
       />
       <VersionBadge upToDate={updater.upToDate} />
+      <Toaster richColors position="top-center" />
     </>
   );
 }

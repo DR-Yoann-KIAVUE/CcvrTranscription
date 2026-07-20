@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
+import { toast } from "sonner";
 import {
   copyFile,
   createCompteRendu,
@@ -22,7 +23,36 @@ import { buildDocx } from "../export/docx";
 import { buildPdf } from "../export/pdf";
 import { blocksToPlainText, parseEditorHtml } from "../export/parse";
 import Editor, { type EditorHandle } from "./Editor";
-import { LogoMark } from "../components/Logo";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
+import {
+  ArrowLeft,
+  Circle,
+  Download,
+  FileText,
+  Loader2,
+  Play,
+  RefreshCw,
+  RotateCcw,
+  Square,
+} from "lucide-react";
 
 interface Props {
   patient: Patient;
@@ -30,13 +60,6 @@ interface Props {
   onBack: () => void;
   onSaved: (cr: CompteRendu) => void;
 }
-
-type Status =
-  | { kind: "idle" }
-  | { kind: "savingAudio" }
-  | { kind: "transcribing" }
-  | { kind: "done"; msg: string }
-  | { kind: "error"; msg: string };
 
 const ORIGINE_LABEL: Record<Origine, string> = {
   transcription: "Transcription",
@@ -53,15 +76,14 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
   const [html, setHtml] = useState(existing?.texte ?? "");
   const [audioPath, setAudioPath] = useState<string | null>(existing?.audio_path ?? null);
   const [crId, setCrId] = useState<number | null>(existing?.id ?? null);
-  const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [modelOk, setModelOk] = useState(true);
   const [modelDir, setModelDir] = useState("");
   const [editorKey, setEditorKey] = useState(0);
   const [dirty, setDirty] = useState(false);
   const [versions, setVersions] = useState<CrVersion[]>([]);
   const [regenOpen, setRegenOpen] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
 
-  // Enregistrement
   const [recording, setRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [level, setLevel] = useState(0);
@@ -121,9 +143,7 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
     }
   };
 
-  // ---- Enregistrement ----
   const startRecording = async () => {
-    setStatus({ kind: "idle" });
     try {
       const rec = new AudioRecorder(setLevel);
       await rec.start();
@@ -132,7 +152,7 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
       setRecording(true);
       timerRef.current = window.setInterval(() => setSeconds((s) => s + 1), 1000);
     } catch (e) {
-      setStatus({ kind: "error", msg: "Micro inaccessible : " + String(e) });
+      toast.error("Micro inaccessible : " + String(e));
     }
   };
 
@@ -146,45 +166,43 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
       recorderRef.current = null;
       await onFinished(result);
     } catch (e) {
-      setStatus({ kind: "error", msg: String(e) });
+      toast.error(String(e));
     }
   };
 
   const transcribeInto = async (path: string, origine: Origine, mode: "insert" | "replace") => {
-    setStatus({ kind: "transcribing" });
-    const text = await transcribe(path);
-    const cleaned = cleanTranscript(text);
-    if (mode === "replace") setEditorHtml(cleaned);
-    else if (text) editorRef.current?.insertHtml(cleaned);
-    originRef.current = origine;
-    setDirty(true);
-    setStatus(
-      text
-        ? { kind: "done", msg: "Transcription insérée. Relisez, corrigez, puis enregistrez." }
-        : { kind: "error", msg: "Transcription vide, vérifiez le micro et réessayez." }
-    );
+    setTranscribing(true);
+    try {
+      const text = await transcribe(path);
+      const cleaned = cleanTranscript(text);
+      if (mode === "replace") setEditorHtml(cleaned);
+      else if (text) editorRef.current?.insertHtml(cleaned);
+      originRef.current = origine;
+      setDirty(true);
+      if (text) toast.success("Transcription insérée. Relisez, corrigez, puis enregistrez.");
+      else toast.error("Transcription vide, vérifiez le micro et réessayez.");
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      setTranscribing(false);
+    }
   };
 
   const onFinished = async (result: RecordingResult) => {
     try {
-      setStatus({ kind: "savingAudio" });
       const name = `p${patient.id}-${Date.now()}`;
       const path = await saveRecording(result.wav, name);
       setAudioPath(path);
       await transcribeInto(path, "transcription", "insert");
     } catch (e) {
-      setStatus({ kind: "error", msg: String(e) });
+      toast.error(String(e));
     }
   };
 
   const doRegenerate = async () => {
     setRegenOpen(false);
     if (!audioPath) return;
-    try {
-      await transcribeInto(audioPath, "regeneration", "replace");
-    } catch (e) {
-      setStatus({ kind: "error", msg: String(e) });
-    }
+    await transcribeInto(audioPath, "regeneration", "replace");
   };
 
   const save = async () => {
@@ -213,11 +231,11 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
       }
       originRef.current = "edition";
       setDirty(false);
-      setStatus({ kind: "done", msg: "Compte-rendu enregistré." });
+      toast.success("Compte-rendu enregistré.");
       await loadVersions(saved.id);
       onSaved(saved);
     } catch (e) {
-      setStatus({ kind: "error", msg: String(e) });
+      toast.error(String(e));
     }
   };
 
@@ -230,7 +248,7 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
       audioElRef.current.load();
       await audioElRef.current.play();
     } catch (e) {
-      setStatus({ kind: "error", msg: "Réécoute impossible : " + String(e) });
+      toast.error("Réécoute impossible : " + String(e));
     }
   };
 
@@ -244,7 +262,7 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
     originRef.current = "edition";
     setEditorHtml(v.texte);
     setDirty(true);
-    setStatus({ kind: "done", msg: "Version restaurée. Enregistrez pour la conserver." });
+    toast.success("Version restaurée. Enregistrez pour la conserver.");
   };
 
   const exportPdf = async () => {
@@ -255,9 +273,9 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
       });
       if (!path) return;
       await saveBytes(path, buildPdf(html, meta()));
-      setStatus({ kind: "done", msg: "PDF exporté : " + fileName(path) });
+      toast.success("PDF exporté : " + fileName(path));
     } catch (e) {
-      setStatus({ kind: "error", msg: "Export PDF impossible : " + String(e) });
+      toast.error("Export PDF impossible : " + String(e));
     }
   };
 
@@ -269,9 +287,9 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
       });
       if (!path) return;
       await saveBytes(path, await buildDocx(html, meta()));
-      setStatus({ kind: "done", msg: "DOCX exporté : " + fileName(path) });
+      toast.success("DOCX exporté : " + fileName(path));
     } catch (e) {
-      setStatus({ kind: "error", msg: "Export DOCX impossible : " + String(e) });
+      toast.error("Export DOCX impossible : " + String(e));
     }
   };
 
@@ -284,25 +302,24 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
       });
       if (!path) return;
       await copyFile(audioPath, path);
-      setStatus({ kind: "done", msg: "Audio téléchargé : " + fileName(path) });
+      toast.success("Audio téléchargé : " + fileName(path));
     } catch (e) {
-      setStatus({ kind: "error", msg: "Téléchargement impossible : " + String(e) });
+      toast.error("Téléchargement impossible : " + String(e));
     }
   };
 
-  const busy = status.kind === "savingAudio" || status.kind === "transcribing";
   const hasContent = blocksToPlainText(parseEditorHtml(html)).trim().length > 0;
 
   return (
-    <div className="shell">
+    <div className="flex h-screen flex-col">
       {/* Bandeau document */}
-      <div className="doc-bar">
-        <button className="ghost" onClick={onBack}>
-          ← Bibliothèque
-        </button>
-        <span className="doc-crumb">{patient.nom}</span>
-        <input
-          className="doc-title"
+      <header className="flex items-center gap-3 border-b bg-background px-5 py-2.5">
+        <Button variant="ghost" size="sm" onClick={onBack}>
+          <ArrowLeft className="size-4" /> Bibliothèque
+        </Button>
+        <span className="font-mono text-xs text-muted-foreground">{patient.nom}</span>
+        <Input
+          className="max-w-md flex-1 border-transparent text-base font-semibold shadow-none hover:border-input focus-visible:border-input"
           value={titre}
           onChange={(e) => {
             setTitre(e.target.value);
@@ -310,101 +327,124 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
           }}
           placeholder="Titre du compte-rendu"
         />
-        <select
-          value={typeCr}
-          onChange={(e) => applyType(e.target.value)}
-          title="Type de compte-rendu"
-        >
-          {REPORT_TYPES.map((t) => (
-            <option key={t.key} value={t.key}>
-              {t.label}
-            </option>
-          ))}
-        </select>
-        <input
+        <Select value={typeCr} onValueChange={applyType}>
+          <SelectTrigger className="w-[240px]" title="Type de compte-rendu">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {REPORT_TYPES.map((t) => (
+              <SelectItem key={t.key} value={t.key}>
+                {t.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Input
           type="date"
+          className="w-[150px]"
           value={dateConsult}
           onChange={(e) => {
             setDateConsult(e.target.value);
             setDirty(true);
           }}
         />
-        <span className={"badge dot " + (dirty ? "dirty" : "accent")}>
+        <Badge
+          variant="outline"
+          className={cn(
+            "gap-1.5",
+            dirty ? "border-warning/40 text-warning" : "border-success/40 text-success"
+          )}
+        >
+          <Circle className={cn("size-2 fill-current")} />
           {dirty ? "Non enregistré" : "Enregistré"}
-        </span>
-        <button className="primary" onClick={save} disabled={busy}>
+        </Badge>
+        <Button onClick={save} disabled={transcribing}>
           Enregistrer
-        </button>
-      </div>
+        </Button>
+      </header>
 
-      <div className="main">
+      <div className="flex-1 overflow-y-auto bg-muted/40 p-6">
         {/* Bandeau de dictée (sombre) */}
-        <div className="dictation-bar">
+        <div className="mb-5 flex items-center gap-4 rounded-xl bg-foreground px-4 py-3 text-background">
           {recording ? (
             <>
-              <button className="rec" onClick={stopRecording}>
-                ■ Arrêter et transcrire
-              </button>
-              <span className="rec-dot" />
-              <span className="timer">{formatDuration(seconds)}</span>
-              <div className="level-meter">
-                <div className="level-bar" style={{ width: `${Math.round(level * 100)}%` }} />
+              <Button variant="destructive" onClick={stopRecording}>
+                <Square className="size-4 fill-current" /> Arrêter et transcrire
+              </Button>
+              <span className="size-2.5 animate-pulse rounded-full bg-destructive" />
+              <span className="font-mono text-xl font-medium tabular-nums">
+                {formatDuration(seconds)}
+              </span>
+              <div className="h-1.5 w-32 overflow-hidden rounded-full bg-white/15">
+                <div
+                  className="h-full bg-primary transition-[width] duration-75"
+                  style={{ width: `${Math.round(level * 100)}%` }}
+                />
               </div>
-              <span className="muted">Micro actif</span>
+              <span className="font-mono text-xs text-white/60">Micro actif</span>
             </>
           ) : (
             <>
-              <button className="rec" onClick={startRecording} disabled={busy}>
-                ● {audioPath ? "Reprendre la dictée" : "Démarrer la dictée"}
-              </button>
-              {audioPath && <button onClick={replay}>▶ Réécouter</button>}
-              <div className="spacer" />
+              <Button variant="destructive" onClick={startRecording} disabled={transcribing}>
+                <Circle className="size-3.5 fill-current" />
+                {audioPath ? "Reprendre la dictée" : "Démarrer la dictée"}
+              </Button>
               {audioPath && (
-                <button
-                  onClick={() => setRegenOpen(true)}
-                  disabled={busy || !modelOk}
+                <Button
+                  variant="ghost"
+                  className="text-white hover:bg-white/10 hover:text-white"
+                  onClick={replay}
                 >
-                  Régénérer le texte depuis l'audio
-                </button>
+                  <Play className="size-4" /> Réécouter
+                </Button>
+              )}
+              <div className="flex-1" />
+              {audioPath && (
+                <Button
+                  variant="ghost"
+                  className="text-white hover:bg-white/10 hover:text-white"
+                  onClick={() => setRegenOpen(true)}
+                  disabled={transcribing || !modelOk}
+                >
+                  <RefreshCw className="size-4" /> Régénérer le texte depuis l'audio
+                </Button>
               )}
             </>
           )}
         </div>
 
-        {/* États */}
+        {/* Modèle absent */}
         {!modelOk && (
-          <div className="notice amber">
-            <span className="dot" />
-            <div>
+          <Card className="mb-5 flex flex-row items-start gap-3 border-warning/30 bg-warning/5 p-4">
+            <span className="mt-1.5 size-2 shrink-0 rounded-full bg-warning" />
+            <div className="text-sm">
               <strong>Le modèle de transcription n'est pas encore installé.</strong>
-              <p>
+              <p className="mt-1 text-muted-foreground">
                 Vous pouvez dicter et conserver l'audio dès maintenant. Le texte
-                sera généré une fois le modèle placé dans : <br />
-                <code>{modelDir || "…"}</code>
+                sera généré une fois le modèle placé dans :{" "}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+                  {modelDir || "…"}
+                </code>
               </p>
             </div>
-          </div>
+          </Card>
         )}
 
-        {status.kind === "transcribing" && (
-          <div className="transcribing">
-            <LogoMark className="spin" />
-            <h3>Transcription en cours</h3>
-            <p>
+        {/* Transcription en cours */}
+        {transcribing && (
+          <Card className="mb-5 flex flex-col items-center p-10 text-center">
+            <Loader2 className="mb-3 size-6 animate-spin text-primary" />
+            <h3 className="text-sm font-semibold">Transcription en cours</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
               Quelques secondes. Le texte s'affichera ici automatiquement, votre
               audio est déjà en sécurité.
             </p>
-          </div>
+          </Card>
         )}
-        {status.kind === "savingAudio" && (
-          <div className="toast ok">Sauvegarde de l'audio en cours…</div>
-        )}
-        {status.kind === "done" && <div className="toast ok">✓ {status.msg}</div>}
-        {status.kind === "error" && <div className="toast err">✕ {status.msg}</div>}
 
         {/* Éditeur + colonne latérale */}
-        <div className="editor-layout">
-          <div className="editor-col">
+        <div className="flex items-start gap-6">
+          <div className="min-w-0 flex-1">
             <Editor
               key={editorKey}
               ref={editorRef}
@@ -417,78 +457,87 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
             />
           </div>
 
-          <div className="side-col">
-            <div className="side-block">
-              <h4>Exports</h4>
-              <div className="side-pad">
-                <button onClick={exportPdf} disabled={!hasContent}>
-                  Exporter en PDF
-                </button>
-                <button onClick={exportDocx} disabled={!hasContent}>
-                  Exporter en DOCX
-                </button>
-                <button onClick={downloadAudio} disabled={!audioPath}>
-                  Télécharger l'audio
-                </button>
+          <div className="flex w-64 shrink-0 flex-col gap-5">
+            <Card className="gap-0 overflow-hidden py-0">
+              <div className="border-b bg-muted/40 px-4 py-2.5 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                Exports
               </div>
-            </div>
+              <div className="flex flex-col gap-2 p-3">
+                <Button variant="outline" className="justify-start" onClick={exportPdf} disabled={!hasContent}>
+                  <FileText className="size-4" /> Exporter en PDF
+                </Button>
+                <Button variant="outline" className="justify-start" onClick={exportDocx} disabled={!hasContent}>
+                  <FileText className="size-4" /> Exporter en DOCX
+                </Button>
+                <Button variant="outline" className="justify-start" onClick={downloadAudio} disabled={!audioPath}>
+                  <Download className="size-4" /> Télécharger l'audio
+                </Button>
+              </div>
+            </Card>
 
-            <div className="side-block">
-              <h4>Versions</h4>
+            <Card className="gap-0 overflow-hidden py-0">
+              <div className="border-b bg-muted/40 px-4 py-2.5 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                Versions
+              </div>
               {versions.length === 0 ? (
-                <div className="side-note">
+                <p className="p-3.5 text-xs text-muted-foreground">
                   Les versions apparaîtront après le premier enregistrement.
-                </div>
+                </p>
               ) : (
                 <>
                   {versions.map((v, i) => (
-                    <div key={v.id} className={"version" + (i === 0 ? " current" : "")}>
+                    <div
+                      key={v.id}
+                      className={cn(
+                        "flex items-center justify-between gap-2 border-b px-3.5 py-2.5 last:border-b-0",
+                        i === 0 && "bg-accent/60"
+                      )}
+                    >
                       <div>
-                        <div className="v-label">
+                        <div className="text-[13px] font-semibold">
                           {i === 0 ? "Version actuelle" : ORIGINE_LABEL[v.origine]}
                         </div>
-                        <div className="v-meta">
-                          {ORIGINE_LABEL[v.origine].toLowerCase()} ·{" "}
-                          {formatDateTime(v.created_at)}
+                        <div className="font-mono text-[11px] text-muted-foreground">
+                          {ORIGINE_LABEL[v.origine].toLowerCase()} · {formatDateTime(v.created_at)}
                         </div>
                       </div>
                       {i !== 0 && (
-                        <button className="small" onClick={() => restoreVersion(v)}>
-                          Restaurer
-                        </button>
+                        <Button size="icon" variant="ghost" className="size-7" title="Restaurer" onClick={() => restoreVersion(v)}>
+                          <RotateCcw className="size-4" />
+                        </Button>
                       )}
                     </div>
                   ))}
-                  <div className="side-note">
+                  <p className="p-3 text-[11px] text-muted-foreground">
                     Chaque dictée ou régénération archive automatiquement une
                     version. Rien n'est perdu.
-                  </div>
+                  </p>
                 </>
               )}
-            </div>
+            </Card>
           </div>
         </div>
       </div>
 
       {/* Modale de régénération */}
-      {regenOpen && (
-        <div className="modal-backdrop" onClick={() => setRegenOpen(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Régénérer le texte ?</h3>
-            <p>
-              Le texte actuel sera remplacé par une nouvelle transcription de
-              l'audio. La version actuelle sera conservée dans l'historique et
-              restera restaurable.
-            </p>
-            <div className="modal-actions">
-              <button onClick={() => setRegenOpen(false)}>Annuler</button>
-              <button className="primary" onClick={doRegenerate}>
-                Régénérer
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Dialog open={regenOpen} onOpenChange={setRegenOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Régénérer le texte ?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Le texte actuel sera remplacé par une nouvelle transcription de
+            l'audio. La version actuelle sera conservée dans l'historique et
+            restera restaurable.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRegenOpen(false)}>
+              Annuler
+            </Button>
+            <Button onClick={doRegenerate}>Régénérer</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import {
   createPatient,
   deleteCompteRendu,
@@ -12,7 +13,19 @@ import {
 import type { CompteRendu, Patient, SearchHit } from "../types";
 import { formatDate } from "../format";
 import { reportTypeLabel } from "../reportTypes";
-import { LogoMark } from "../components/Logo";
+import { LogoMark } from "@/components/Logo";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
+import { Lock, Plus, Search } from "lucide-react";
 
 interface Props {
   onOpen: (patient: Patient, existing: CompteRendu | null) => void;
@@ -27,21 +40,17 @@ export default function Library({ onOpen, onLogout, refreshKey }: Props) {
   const [crs, setCrs] = useState<CompteRendu[]>([]);
   const [contentQuery, setContentQuery] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
-  const [error, setError] = useState("");
 
-  // Ajout de patient
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDob, setNewDob] = useState("");
-
-  // Sélecteur « Nouvelle dictée »
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const loadPatients = useCallback(async () => {
     try {
       setPatients(await listPatients(patientQuery));
     } catch (e) {
-      setError(String(e));
+      toast.error(String(e));
     }
   }, [patientQuery]);
 
@@ -53,7 +62,7 @@ export default function Library({ onOpen, onLogout, refreshKey }: Props) {
     try {
       setCrs(await listComptesRendus(p.id));
     } catch (e) {
-      setError(String(e));
+      toast.error(String(e));
     }
   }, []);
 
@@ -68,7 +77,7 @@ export default function Library({ onOpen, onLogout, refreshKey }: Props) {
       return;
     }
     const t = setTimeout(() => {
-      searchComptesRendus(q).then(setHits).catch((e) => setError(String(e)));
+      searchComptesRendus(q).then(setHits).catch((e) => toast.error(String(e)));
     }, 200);
     return () => clearTimeout(t);
   }, [contentQuery, refreshKey]);
@@ -84,7 +93,7 @@ export default function Library({ onOpen, onLogout, refreshKey }: Props) {
       await loadPatients();
       setSelected(p);
     } catch (e) {
-      setError(String(e));
+      toast.error(String(e));
     }
   };
 
@@ -101,6 +110,7 @@ export default function Library({ onOpen, onLogout, refreshKey }: Props) {
       setCrs([]);
     }
     await loadPatients();
+    toast.success("Patient supprimé.");
   };
 
   const renameCr = async (cr: CompteRendu) => {
@@ -132,107 +142,111 @@ export default function Library({ onOpen, onLogout, refreshKey }: Props) {
   };
 
   const patientSub = (p: Patient) => {
-    const n = `${p.nb_cr} compte${p.nb_cr > 1 ? "s" : ""}-rendu${
-      p.nb_cr > 1 ? "s" : ""
-    }`;
+    const n = `${p.nb_cr} compte${p.nb_cr > 1 ? "s" : ""}-rendu${p.nb_cr > 1 ? "s" : ""}`;
     return p.date_naissance ? `${n} · Né(e) le ${formatDate(p.date_naissance)}` : n;
   };
 
   return (
-    <div className="shell">
-      <div className="appbar">
-        <span className="logo">
-          <LogoMark />
-          <span className="wordmark">CCVR Dictée</span>
-          <span className="appbar-sub">Cabinet du Dr Kiavué</span>
+    <div className="flex h-screen flex-col">
+      {/* Barre d'application */}
+      <header className="flex items-center gap-4 border-b bg-background px-5 py-2.5">
+        <span className="flex items-center gap-2 text-foreground">
+          <LogoMark className="size-5 text-primary" />
+          <span className="font-semibold tracking-tight">CCVR Dictée</span>
+          <span className="ml-1 border-l pl-2.5 font-mono text-[11px] text-muted-foreground">
+            Cabinet du Dr Kiavué
+          </span>
         </span>
-        <div className="search">
-          <input
+        <div className="relative ml-2 max-w-md flex-1">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="pl-8"
             placeholder="Rechercher dans tous les comptes-rendus"
             value={contentQuery}
             onChange={(e) => setContentQuery(e.target.value)}
           />
         </div>
-        <div className="spacer" />
-        <button className="primary" onClick={() => setPickerOpen(true)}>
-          + Nouvelle dictée
-        </button>
-        <button className="ghost" onClick={onLogout}>
-          Verrouiller
-        </button>
-      </div>
+        <div className="flex-1" />
+        <Button onClick={() => setPickerOpen(true)}>
+          <Plus className="size-4" /> Nouvelle dictée
+        </Button>
+        <Button variant="ghost" onClick={onLogout}>
+          <Lock className="size-4" /> Verrouiller
+        </Button>
+      </header>
 
-      <div className="shell-body">
-        <aside className="sidebar">
-          <div className="sidebar-header">
-            <div className="sidebar-title">
-              <span className="eyebrow">Patients</span>
-              <button
-                className="ghost small"
-                onClick={() => setAdding((a) => !a)}
-              >
-                + Nouveau
-              </button>
+      <div className="flex min-h-0 flex-1">
+        {/* Sidebar */}
+        <aside className="flex w-[300px] min-w-[300px] flex-col border-r bg-muted/30">
+          <div className="border-b p-4">
+            <div className="mb-2.5 flex items-center justify-between">
+              <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                Patients
+              </span>
+              <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => setAdding((a) => !a)}>
+                <Plus className="size-3.5" /> Nouveau
+              </Button>
             </div>
-            <input
+            <Input
               placeholder="Rechercher un patient"
               value={patientQuery}
               onChange={(e) => setPatientQuery(e.target.value)}
-              style={{ width: "100%" }}
             />
             {adding && (
-              <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
-                <input
+              <div className="mt-2.5 flex flex-col gap-2">
+                <Input
                   placeholder="Nom et prénom"
                   value={newName}
                   autoFocus
                   onChange={(e) => setNewName(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && addPatient()}
                 />
-                <input
+                <Input
                   type="date"
                   title="Date de naissance (optionnel)"
                   value={newDob}
                   onChange={(e) => setNewDob(e.target.value)}
                 />
-                <button className="primary small" onClick={addPatient} disabled={!newName.trim()}>
+                <Button size="sm" onClick={addPatient} disabled={!newName.trim()}>
                   Créer le patient
-                </button>
+                </Button>
               </div>
             )}
           </div>
-          <div className="sidebar-list">
+          <div className="flex-1 overflow-y-auto">
             {patients.map((p) => (
-              <div
+              <button
                 key={p.id}
-                className={"list-item" + (selected?.id === p.id ? " active" : "")}
+                className={cn(
+                  "block w-full border-b px-4 py-3 text-left transition-colors hover:bg-card",
+                  selected?.id === p.id && "border-l-2 border-l-primary bg-accent"
+                )}
                 onClick={() => {
                   setSelected(p);
                   setContentQuery("");
                 }}
               >
-                <div className="title">{p.nom}</div>
-                <div className="sub">
+                <div className="text-sm font-semibold">{p.nom}</div>
+                <div className="mt-0.5 text-xs text-muted-foreground">
                   {patientSub(p)}
                   {"  ·  "}
                   <span
+                    className="cursor-pointer text-destructive hover:underline"
                     onClick={(e) => {
                       e.stopPropagation();
                       removePatient(p);
                     }}
-                    style={{ color: "var(--danger)", cursor: "pointer" }}
                   >
                     supprimer
                   </span>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         </aside>
 
-        <main className="main">
-          {error && <div className="toast err">{error}</div>}
-
+        {/* Principal */}
+        <main className="flex-1 overflow-y-auto bg-muted/40 p-8">
           {contentQuery.trim() ? (
             <SearchResults query={contentQuery} hits={hits} onOpen={openHit} />
           ) : selected ? (
@@ -244,52 +258,30 @@ export default function Library({ onOpen, onLogout, refreshKey }: Props) {
               onRename={renameCr}
               onRemove={removeCr}
             />
-          ) : patients.length === 0 ? (
-            <div className="empty-state">
-              <LogoMark />
-              <h3>Aucun patient pour l'instant</h3>
-              <p>Créez votre premier patient, puis lancez la dictée. Tout est prêt.</p>
-              <button
-                className="primary"
-                onClick={() => {
-                  setAdding(true);
-                }}
-              >
-                + Nouveau patient
-              </button>
-            </div>
           ) : (
-            <div className="empty-state">
-              <LogoMark />
-              <h3>Sélectionnez un patient</h3>
-              <p>
-                Choisissez un patient à gauche pour voir ses comptes-rendus, ou
-                lancez une nouvelle dictée.
-              </p>
-              <button className="primary" onClick={() => setPickerOpen(true)}>
-                + Nouvelle dictée
-              </button>
-            </div>
+            <EmptyState
+              hasPatients={patients.length > 0}
+              onNew={() => (patients.length > 0 ? setPickerOpen(true) : setAdding(true))}
+            />
           )}
         </main>
       </div>
 
-      {pickerOpen && (
-        <PatientPicker
-          patients={patients}
-          onClose={() => setPickerOpen(false)}
-          onPick={(p) => {
-            setPickerOpen(false);
-            onOpen(p, null);
-          }}
-          onCreate={async (nom) => {
-            const p = await createPatient(nom, null);
-            setPickerOpen(false);
-            await loadPatients();
-            onOpen(p, null);
-          }}
-        />
-      )}
+      <PatientPicker
+        open={pickerOpen}
+        patients={patients}
+        onOpenChange={setPickerOpen}
+        onPick={(p) => {
+          setPickerOpen(false);
+          onOpen(p, null);
+        }}
+        onCreate={async (nom) => {
+          const p = await createPatient(nom, null);
+          setPickerOpen(false);
+          await loadPatients();
+          onOpen(p, null);
+        }}
+      />
     </div>
   );
 }
@@ -316,26 +308,32 @@ function SearchResults({
   onOpen: (h: SearchHit) => void;
 }) {
   return (
-    <div className="main-narrow">
-      <div className="search-count">
+    <div className="mx-auto max-w-3xl">
+      <div className="mb-3 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
         {hits.length} compte{hits.length > 1 ? "s" : ""}-rendu
         {hits.length > 1 ? "s" : ""} trouvé{hits.length > 1 ? "s" : ""}
       </div>
       {hits.length === 0 && (
-        <p style={{ color: "var(--text-soft)", fontSize: 13 }}>
+        <p className="text-sm text-muted-foreground">
           Aucun compte-rendu ne contient « {query} ».
         </p>
       )}
-      {hits.map((h) => (
-        <div key={h.id} className="cr-row" onClick={() => onOpen(h)}>
-          <div>
-            <div className="title">
+      <div className="flex flex-col gap-2">
+        {hits.map((h) => (
+          <Card
+            key={h.id}
+            className="cursor-pointer p-3 transition-colors hover:bg-accent/50"
+            onClick={() => onOpen(h)}
+          >
+            <div className="text-sm font-semibold">
               {h.patient_nom} · {h.titre}
             </div>
-            <div className="sub">{highlight(h.extrait, query)}</div>
-          </div>
-        </div>
-      ))}
+            <div className="mt-0.5 text-xs text-muted-foreground">
+              {highlight(h.extrait, query)}
+            </div>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }
@@ -356,92 +354,103 @@ function PatientView({
   onRemove: (cr: CompteRendu) => void;
 }) {
   return (
-    <div className="main-narrow">
-      <div className="page-head">
+    <div className="mx-auto max-w-3xl">
+      <div className="mb-5 flex items-start justify-between gap-4">
         <div>
-          <h1>{patient.nom}</h1>
-          <div className="sub">{subLine}</div>
+          <h1 className="text-2xl font-semibold tracking-tight">{patient.nom}</h1>
+          <div className="mt-1 text-sm text-muted-foreground">{subLine}</div>
         </div>
-        <button onClick={() => onOpen(patient, null)}>
+        <Button variant="outline" onClick={() => onOpen(patient, null)}>
           Nouvelle dictée pour ce patient
-        </button>
+        </Button>
       </div>
 
       {crs.length === 0 ? (
-        <p style={{ color: "var(--text-soft)", fontSize: 13 }}>
+        <p className="text-sm text-muted-foreground">
           Aucun compte-rendu. Cliquez sur « Nouvelle dictée pour ce patient ».
         </p>
       ) : (
-        crs.map((cr) => (
-          <div key={cr.id} className="cr-row" onClick={() => onOpen(patient, cr)}>
-            <div>
-              <div className="title">
-                {cr.titre}
-                {reportTypeLabel(cr.type_cr) && (
-                  <span className="badge accent">{reportTypeLabel(cr.type_cr)}</span>
-                )}
+        <div className="flex flex-col gap-2">
+          {crs.map((cr) => (
+            <Card
+              key={cr.id}
+              className="group flex cursor-pointer flex-row items-center justify-between gap-3 p-3.5 transition-colors hover:bg-accent/40"
+              onClick={() => onOpen(patient, cr)}
+            >
+              <div>
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  {cr.titre}
+                  {reportTypeLabel(cr.type_cr) && (
+                    <Badge variant="secondary" className="font-normal">
+                      {reportTypeLabel(cr.type_cr)}
+                    </Badge>
+                  )}
+                </div>
+                <div className="mt-0.5 text-xs text-muted-foreground">
+                  Consultation du {formatDate(cr.date_consultation)}
+                </div>
               </div>
-              <div className="sub">
-                Consultation du {formatDate(cr.date_consultation)}
+              <div className="flex gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+                <Button size="sm" onClick={(e) => { e.stopPropagation(); onOpen(patient, cr); }}>
+                  Ouvrir
+                </Button>
+                <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); onRename(cr); }}>
+                  Renommer
+                </Button>
+                <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); onRemove(cr); }}>
+                  Supprimer
+                </Button>
               </div>
-            </div>
-            <div className="cr-actions">
-              <button
-                className="primary small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpen(patient, cr);
-                }}
-              >
-                Ouvrir
-              </button>
-              <button
-                className="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRename(cr);
-                }}
-              >
-                Renommer
-              </button>
-              <button
-                className="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRemove(cr);
-                }}
-              >
-                Supprimer
-              </button>
-            </div>
-          </div>
-        ))
+            </Card>
+          ))}
+        </div>
       )}
     </div>
   );
 }
 
+function EmptyState({ hasPatients, onNew }: { hasPatients: boolean; onNew: () => void }) {
+  return (
+    <div className="mx-auto mt-16 max-w-md">
+      <Card className="flex flex-col items-center p-10 text-center">
+        <LogoMark className="mb-3 size-8 text-muted-foreground" />
+        <h3 className="text-base font-semibold">
+          {hasPatients ? "Sélectionnez un patient" : "Aucun patient pour l'instant"}
+        </h3>
+        <p className="mb-4 mt-2 text-sm text-muted-foreground">
+          {hasPatients
+            ? "Choisissez un patient à gauche pour voir ses comptes-rendus, ou lancez une nouvelle dictée."
+            : "Créez votre premier patient, puis lancez la dictée. Tout est prêt."}
+        </p>
+        <Button onClick={onNew}>
+          <Plus className="size-4" /> {hasPatients ? "Nouvelle dictée" : "Nouveau patient"}
+        </Button>
+      </Card>
+    </div>
+  );
+}
+
 function PatientPicker({
+  open,
   patients,
-  onClose,
+  onOpenChange,
   onPick,
   onCreate,
 }: {
+  open: boolean;
   patients: Patient[];
-  onClose: () => void;
+  onOpenChange: (o: boolean) => void;
   onPick: (p: Patient) => void;
   onCreate: (nom: string) => void;
 }) {
   const [q, setQ] = useState("");
   const filtered = useMemo(
-    () =>
-      patients.filter((p) => p.nom.toLowerCase().includes(q.trim().toLowerCase())),
+    () => patients.filter((p) => p.nom.toLowerCase().includes(q.trim().toLowerCase())),
     [patients, q]
   );
   const canCreate = q.trim().length > 0 && filtered.length === 0;
 
   const onKey = (e: React.KeyboardEvent) => {
-    if (e.key === "Escape") onClose();
     if (e.key === "Enter") {
       if (filtered.length > 0) onPick(filtered[0]);
       else if (canCreate) onCreate(q.trim());
@@ -449,38 +458,44 @@ function PatientPicker({
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3>Pour quel patient ?</h3>
-        <input
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Pour quel patient ?</DialogTitle>
+        </DialogHeader>
+        <Input
           placeholder="Nom du patient"
           value={q}
           autoFocus
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={onKey}
-          style={{ width: "100%" }}
         />
-        <div className="picker-list">
+        <div className="overflow-hidden rounded-md border">
           {filtered.slice(0, 6).map((p) => (
-            <div key={p.id} className="picker-item" onClick={() => onPick(p)}>
+            <button
+              key={p.id}
+              className="block w-full border-b px-3 py-2.5 text-left text-sm last:border-b-0 hover:bg-accent hover:text-accent-foreground"
+              onClick={() => onPick(p)}
+            >
               {p.nom}
-            </div>
+            </button>
           ))}
           {canCreate && (
-            <div className="picker-item" onClick={() => onCreate(q.trim())}>
+            <button
+              className="block w-full px-3 py-2.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+              onClick={() => onCreate(q.trim())}
+            >
               + Créer « {q.trim()} » comme nouveau patient
-            </div>
+            </button>
           )}
           {filtered.length === 0 && !canCreate && (
-            <div className="picker-item" style={{ color: "var(--text-soft)", cursor: "default" }}>
-              Aucun patient
-            </div>
+            <div className="px-3 py-2.5 text-sm text-muted-foreground">Aucun patient</div>
           )}
         </div>
-        <div className="picker-hint">
+        <p className="text-xs text-muted-foreground">
           Entrée pour valider et passer directement à la dictée.
-        </div>
-      </div>
-    </div>
+        </p>
+      </DialogContent>
+    </Dialog>
   );
 }
