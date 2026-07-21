@@ -12,12 +12,12 @@
 #   ./scripts/make-release.sh --publish  # + crée la release GitHub publique
 #
 # Dépôt public de releases (endpoint de l'app) :
-#   DR-Yoann-KIAVUE/ccvr-dictee-releases
+#   DR-Yoann-KIAVUE/CcvrTranscription
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-RELEASES_REPO="DR-Yoann-KIAVUE/ccvr-dictee-releases"
+RELEASES_REPO="DR-Yoann-KIAVUE/CcvrTranscription"
 KEY_PATH="$HOME/.ccvr/ccvr-updater.key"
 OUT="dist-release"
 

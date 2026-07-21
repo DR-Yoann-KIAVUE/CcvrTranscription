@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "med_stt",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "identifier": "com.drkiavueyoann.dictee",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -32,7 +32,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/DR-Yoann-KIAVUE/ccvr-dictee-releases/releases/latest/download/latest.json"
+        "https://github.com/DR-Yoann-KIAVUE/CcvrTranscription/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI3OUE0OTYwRTMyQjE1QkQKUldTOUZTdmpZRW1hdDM0ZldZTmZ3R292RVo1UWVZT2tZdkV0NHd2R3Q3bk5odGwwNW9aZ1IvdHAK"
     }
