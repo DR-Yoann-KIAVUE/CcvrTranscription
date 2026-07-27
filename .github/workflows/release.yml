@@ -1,0 +1,67 @@
+name: Release
+
+# Publie une release multiplateforme (macOS Apple Silicon + Intel, Windows x64)
+# à chaque tag "vX.Y.Z". Build, signature updater et latest.json combiné sont
+# gérés par tauri-action. Le modèle Whisper n'est PAS nécessaire au build.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-14 # Apple Silicon (aarch64)
+          - platform: macos-13 # Intel (x86_64)
+          - platform: windows-latest # x86_64
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      # whisper-rs-sys utilise bindgen -> libclang requis. Présent via Xcode sur
+      # macOS ; à installer sur Windows.
+      - name: LLVM (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install llvm --no-progress -y
+          echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
+
+      - name: Dépendances frontend
+        run: npm ci
+
+      - name: Build + publication
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "med_stt ${{ github.ref_name }}"
+          releaseBody: "Mise à jour ${{ github.ref_name }}."
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
