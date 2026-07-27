@@ -6,32 +6,29 @@ renvoyer un `.dmg` à chaque fois.
 
 ## Principe
 
-- **Code source** : dépôt **privé** (ex. `soraisv2/ccvr-dictee`). Personne ne le voit.
-- **Releases** : dépôt **public** dédié (`DR-Yoann-KIAVUE/CcvrTranscription`) qui ne
-  contient **que** les binaires compilés + `latest.json`. Aucune source, aucune
-  donnée patient, aucun secret.
-- L'app interroge `latest.json` au lancement. Si une version plus récente
-  existe, une bannière **« Mise à jour disponible »** apparaît ; un clic sur
-  **« Mettre à jour »** télécharge, installe et relance l'app.
+- **Repo officiel unique** : `DR-Yoann-KIAVUE/CcvrTranscription` (**public**). Il
+  contient le **code source** et les **releases** (binaires signés + `latest.json`).
+  Aucune donnée patient, aucun secret n'y figure (la clé privée de signature reste
+  hors dépôt, dans `~/.ccvr/`).
+- L'app interroge `latest.json` (via l'onglet Releases de ce repo). Si une version
+  plus récente existe, une bannière **« Mise à jour disponible »** apparaît ; un
+  clic sur **« Mettre à jour »** télécharge, installe et relance l'app.
 - L'installeur (`.dmg`) et chaque mise à jour sont **signés** avec votre clé
   privée (`~/.ccvr/ccvr-updater.key`). L'app vérifie cette signature avec la clé
   publique intégrée : une mise à jour non signée par vous est refusée.
 
-> L'updater est le **seul** accès réseau de l'app. Il ne contacte que le dépôt
-> de releases et n'envoie aucune donnée. Les comptes-rendus et l'audio restent
+> L'updater est le **seul** accès réseau de l'app. Il ne contacte que la page de
+> releases et n'envoie aucune donnée. Les comptes-rendus et l'audio restent
 > 100 % locaux.
 
-## Réglage unique (à faire une fois)
+## Réglage unique (déjà en place)
 
 1. **Clé de signature** (déjà générée) : `~/.ccvr/ccvr-updater.key`.
    La garder secrète et sauvegardée. Si perdue, les mises à jour ne peuvent plus
    être signées. La clé publique est déjà dans `src-tauri/tauri.conf.json`.
-2. **Créer le dépôt public de releases** (une fois) :
-   ```bash
-   gh repo create DR-Yoann-KIAVUE/CcvrTranscription --public \
-     --description "Releases CCVR Dictée (binaires uniquement)"
-   ```
-   (Aucune source n'y est poussée : seulement les fichiers de release.)
+2. **Repo officiel** : `DR-Yoann-KIAVUE/CcvrTranscription`, déjà créé et public.
+   Le code source y est poussé (`git push origin main`) et les releases y sont
+   publiées par `scripts/make-release.sh`.
 
 ## Donner l'app au collègue (première fois)
 
