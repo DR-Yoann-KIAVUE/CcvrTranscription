@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Requis pour que macOS/WKWebView autorise l'accès au micro (getUserMedia). -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>med_stt utilise le microphone pour dicter et transcrire les comptes-rendus. L'audio reste sur cet ordinateur.</string>
+</dict>
+</plist>
