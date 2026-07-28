@@ -19,8 +19,9 @@ jobs:
       matrix:
         include:
           - platform: macos-14 # Apple Silicon (aarch64)
-          - platform: macos-13 # Intel (x86_64)
           - platform: windows-latest # x86_64
+          # macOS Intel (macos-13) retiré : runners GitHub Intel indisponibles
+          # et aucun poste Intel à couvrir. À réintroduire si besoin.
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
