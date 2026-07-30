@@ -1,8 +1,16 @@
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
 /// Transcrit un fichier WAV local avec Whisper (langue = français).
-/// Bloquant : à exécuter dans un thread dédié.
-pub fn run_whisper(model_path: &str, wav_path: &str) -> Result<String, String> {
+/// Bloquant : à exécuter dans un thread dédié. `on_progress` reçoit la
+/// progression en pourcentage (0..100) pendant le traitement.
+pub fn run_whisper<F>(
+    model_path: &str,
+    wav_path: &str,
+    on_progress: F,
+) -> Result<String, String>
+where
+    F: FnMut(i32) + 'static,
+{
     let samples = read_wav_mono_16k_f32(wav_path)?;
     if samples.is_empty() {
         return Err("Fichier audio vide.".into());
@@ -27,6 +35,7 @@ pub fn run_whisper(model_path: &str, wav_path: &str) -> Result<String, String> {
         .map(|n| n.get() as i32)
         .unwrap_or(4);
     params.set_n_threads(threads);
+    params.set_progress_callback_safe(on_progress);
 
     state
         .full(params, &samples)

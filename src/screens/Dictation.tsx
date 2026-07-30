@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 import {
@@ -83,6 +84,7 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
   const [versions, setVersions] = useState<CrVersion[]>([]);
   const [regenOpen, setRegenOpen] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
+  const [progress, setProgress] = useState(0);
 
   const [recording, setRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
@@ -171,7 +173,9 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
   };
 
   const transcribeInto = async (path: string, origine: Origine, mode: "insert" | "replace") => {
+    setProgress(0);
     setTranscribing(true);
+    const un = await listen<number>("transcribe-progress", (e) => setProgress(e.payload));
     try {
       const text = await transcribe(path);
       const cleaned = cleanTranscript(text);
@@ -184,6 +188,7 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
     } catch (e) {
       toast.error(String(e));
     } finally {
+      un();
       setTranscribing(false);
     }
   };
@@ -434,10 +439,20 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
         {transcribing && (
           <Card className="mb-5 flex flex-col items-center p-10 text-center">
             <Loader2 className="mb-3 size-6 animate-spin text-primary" />
-            <h3 className="text-sm font-semibold">Transcription en cours</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Quelques secondes. Le texte s'affichera ici automatiquement, votre
-              audio est déjà en sécurité.
+            <h3 className="text-sm font-semibold">
+              {progress === 0
+                ? "Chargement du modèle…"
+                : `Transcription en cours — ${progress} %`}
+            </h3>
+            <div className="mt-3 h-2 w-full max-w-sm overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-primary transition-[width] duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <p className="mt-3 text-sm text-muted-foreground">
+              Progression sur la durée de l'audio. Votre enregistrement est déjà
+              en sécurité ; le texte s'affichera automatiquement à la fin.
             </p>
           </Card>
         )}

@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 /// Clé de configuration du hash de mot de passe.
 const CFG_PASSWORD: &str = "password_hash";
@@ -286,9 +286,19 @@ fn save_recording(app: AppHandle, wav: Vec<u8>, name: String) -> Result<String, 
 async fn transcribe(app: AppHandle, path: String) -> Result<String, String> {
     let model = pick_model(&app)?;
     let model_str = model.display().to_string();
-    tauri::async_runtime::spawn_blocking(move || transcribe::run_whisper(&model_str, &path))
-        .await
-        .map_err(|e| format!("Erreur d'exécution : {e}"))?
+    let app_ev = app.clone();
+    let mut last = -1i32;
+    tauri::async_runtime::spawn_blocking(move || {
+        transcribe::run_whisper(&model_str, &path, move |pct| {
+            // N'émet que sur changement, pour limiter le trafic d'événements.
+            if pct != last {
+                last = pct;
+                let _ = app_ev.emit("transcribe-progress", pct);
+            }
+        })
+    })
+    .await
+    .map_err(|e| format!("Erreur d'exécution : {e}"))?
 }
 
 // ---------- Commandes : export granulaire ----------
