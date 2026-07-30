@@ -42,6 +42,16 @@ fn models_dir(app: &AppHandle) -> Result<PathBuf, String> {
 
 /// Sélectionne le fichier de modèle ggml à utiliser (priorité au français).
 fn pick_model(app: &AppHandle) -> Result<PathBuf, String> {
+    // 1) Modèle embarqué dans l'application (ressource livrée avec l'installeur).
+    if let Ok(p) = app
+        .path()
+        .resolve("models/ggml-large-v3-french.bin", tauri::path::BaseDirectory::Resource)
+    {
+        if p.exists() {
+            return Ok(p);
+        }
+    }
+    // 2) Sinon, modèle fourni par l'utilisateur dans le dossier de données.
     let dir = models_dir(app)?;
     let preferred = [
         "ggml-large-v3-french.bin",
