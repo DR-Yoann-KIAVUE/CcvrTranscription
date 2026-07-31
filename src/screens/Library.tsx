@@ -15,6 +15,7 @@ import { formatDate } from "../format";
 import { reportTypeLabel } from "../reportTypes";
 import { LogoMark } from "@/components/Logo";
 import { DataDialog } from "@/components/DataDialog";
+import { SettingsDialog } from "@/components/SettingsDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -26,7 +27,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { Database, Lock, Plus, Search } from "lucide-react";
+import { Database, Lock, Plus, Search, Settings } from "lucide-react";
 
 interface Props {
   onOpen: (patient: Patient, existing: CompteRendu | null) => void;
@@ -47,6 +48,7 @@ export default function Library({ onOpen, onLogout, refreshKey }: Props) {
   const [newDob, setNewDob] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [dataOpen, setDataOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const loadPatients = useCallback(async () => {
     try {
@@ -172,6 +174,9 @@ export default function Library({ onOpen, onLogout, refreshKey }: Props) {
         <Button onClick={() => setPickerOpen(true)}>
           <Plus className="size-4" /> Nouvelle dictée
         </Button>
+        <Button variant="ghost" onClick={() => setSettingsOpen(true)}>
+          <Settings className="size-4" /> Réglages
+        </Button>
         <Button variant="ghost" onClick={() => setDataOpen(true)}>
           <Database className="size-4" /> Données
         </Button>
@@ -289,6 +294,7 @@ export default function Library({ onOpen, onLogout, refreshKey }: Props) {
       />
 
       <DataDialog open={dataOpen} onOpenChange={setDataOpen} />
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </div>
   );
 }

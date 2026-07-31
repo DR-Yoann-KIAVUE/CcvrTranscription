@@ -26,6 +26,8 @@ argon2 = { version = "0.5", features = ["std"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
 whisper-rs = "0.14"
 thiserror = "1"
+reqwest = { version = "0.13", default-features = false, features = ["multipart", "json", "stream", "rustls", "http2"] }
+futures-util = "0.3"
 
 [features]
 # Placeholder pour d'éventuelles features (ex. accélération GPU).

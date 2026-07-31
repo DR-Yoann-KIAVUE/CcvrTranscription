@@ -6,12 +6,13 @@ import { toast } from "sonner";
 import {
   copyFile,
   createCompteRendu,
+  getSttProvider,
   listCrVersions,
   modelPresent,
-  modelsDirPath,
   saveBytes,
   saveRecording,
   transcribe,
+  transcribeElevenlabs,
   updateCompteRendu,
   type Origine,
 } from "../api";
@@ -78,13 +79,14 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
   const [audioPath, setAudioPath] = useState<string | null>(existing?.audio_path ?? null);
   const [crId, setCrId] = useState<number | null>(existing?.id ?? null);
   const [modelOk, setModelOk] = useState(true);
-  const [modelDir, setModelDir] = useState("");
+  const [provider, setProvider] = useState<string>("local");
   const [editorKey, setEditorKey] = useState(0);
   const [dirty, setDirty] = useState(false);
   const [versions, setVersions] = useState<CrVersion[]>([]);
   const [regenOpen, setRegenOpen] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [cloud, setCloud] = useState(false);
 
   const [recording, setRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
@@ -98,7 +100,7 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
 
   useEffect(() => {
     modelPresent().then(setModelOk).catch(() => setModelOk(false));
-    modelsDirPath().then(setModelDir).catch(() => {});
+    getSttProvider().then(setProvider).catch(() => {});
     if (existing?.id != null) loadVersions(existing.id);
     return () => {
       if (timerRef.current) window.clearInterval(timerRef.current);
@@ -173,11 +175,18 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
   };
 
   const transcribeInto = async (path: string, origine: Origine, mode: "insert" | "replace") => {
+    const provider = await getSttProvider().catch(() => "local");
+    const isCloud = provider === "elevenlabs";
+    setCloud(isCloud);
     setProgress(0);
     setTranscribing(true);
-    const un = await listen<number>("transcribe-progress", (e) => setProgress(e.payload));
+    const un = isCloud
+      ? undefined
+      : await listen<number>("transcribe-progress", (e) => setProgress(e.payload));
     try {
-      const text = await transcribe(path);
+      const text = isCloud
+        ? await transcribeElevenlabs(path)
+        : await transcribe(path);
       const cleaned = cleanTranscript(text);
       if (mode === "replace") setEditorHtml(cleaned);
       else if (text) editorRef.current?.insertHtml(cleaned);
@@ -188,7 +197,7 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
     } catch (e) {
       toast.error(String(e));
     } finally {
-      un();
+      un?.();
       setTranscribing(false);
     }
   };
@@ -409,7 +418,7 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
                   variant="ghost"
                   className="text-white hover:bg-white/10 hover:text-white"
                   onClick={() => setRegenOpen(true)}
-                  disabled={transcribing || !modelOk}
+                  disabled={transcribing || (provider === "local" && !modelOk)}
                 >
                   <RefreshCw className="size-4" /> Régénérer le texte depuis l'audio
                 </Button>
@@ -418,18 +427,16 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
           )}
         </div>
 
-        {/* Modèle absent */}
-        {!modelOk && (
+        {/* Modèle absent (mode local uniquement) */}
+        {provider === "local" && !modelOk && (
           <Card className="mb-5 flex flex-row items-start gap-3 border-warning/30 bg-warning/5 p-4">
             <span className="mt-1.5 size-2 shrink-0 rounded-full bg-warning" />
             <div className="text-sm">
-              <strong>Le modèle de transcription n'est pas encore installé.</strong>
+              <strong>Le modèle de transcription local n'est pas installé.</strong>
               <p className="mt-1 text-muted-foreground">
-                Vous pouvez dicter et conserver l'audio dès maintenant. Le texte
-                sera généré une fois le modèle placé dans :{" "}
-                <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
-                  {modelDir || "…"}
-                </code>
+                Ouvrez <strong>Réglages</strong> pour télécharger le modèle (~1 Go,
+                une fois), ou passez en mode <strong>ElevenLabs</strong> (cloud).
+                Vous pouvez dicter et conserver l'audio dès maintenant.
               </p>
             </div>
           </Card>
@@ -439,21 +446,35 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
         {transcribing && (
           <Card className="mb-5 flex flex-col items-center p-10 text-center">
             <Loader2 className="mb-3 size-6 animate-spin text-primary" />
-            <h3 className="text-sm font-semibold">
-              {progress === 0
-                ? "Chargement du modèle…"
-                : `Transcription en cours — ${progress} %`}
-            </h3>
-            <div className="mt-3 h-2 w-full max-w-sm overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full rounded-full bg-primary transition-[width] duration-300"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <p className="mt-3 text-sm text-muted-foreground">
-              Progression sur la durée de l'audio. Votre enregistrement est déjà
-              en sécurité ; le texte s'affichera automatiquement à la fin.
-            </p>
+            {cloud ? (
+              <>
+                <h3 className="text-sm font-semibold">
+                  Transcription (ElevenLabs) en cours…
+                </h3>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  L'audio est envoyé au service cloud puis transcrit. Le texte
+                  s'affichera automatiquement.
+                </p>
+              </>
+            ) : (
+              <>
+                <h3 className="text-sm font-semibold">
+                  {progress === 0
+                    ? "Chargement du modèle…"
+                    : `Transcription en cours — ${progress} %`}
+                </h3>
+                <div className="mt-3 h-2 w-full max-w-sm overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-primary transition-[width] duration-300"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+                <p className="mt-3 text-sm text-muted-foreground">
+                  Progression sur la durée de l'audio. Votre enregistrement est
+                  déjà en sécurité ; le texte s'affichera à la fin.
+                </p>
+              </>
+            )}
           </Card>
         )}
 

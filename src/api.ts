@@ -86,6 +86,19 @@ export const saveRecording = (wav: Uint8Array, name: string) =>
 // ---- Transcription ----
 export const transcribe = (path: string) =>
   invoke<string>("transcribe", { path });
+export const transcribeElevenlabs = (path: string) =>
+  invoke<string>("transcribe_elevenlabs", { path });
+
+// ---- Réglages moteur STT ----
+export type SttProvider = "local" | "elevenlabs";
+export const getSttProvider = () =>
+  invoke<string>("get_stt_provider") as Promise<SttProvider>;
+export const setSttProvider = (provider: SttProvider) =>
+  invoke<void>("set_stt_provider", { provider });
+export const elevenKeyPresent = () => invoke<boolean>("eleven_key_present");
+export const setElevenKey = (key: string) =>
+  invoke<void>("set_eleven_key", { key });
+export const downloadModel = () => invoke<string>("download_model");
 
 // ---- Export granulaire ----
 export const saveBytes = (path: string, bytes: Uint8Array) =>

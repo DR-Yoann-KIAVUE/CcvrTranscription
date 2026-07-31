@@ -301,6 +301,125 @@ async fn transcribe(app: AppHandle, path: String) -> Result<String, String> {
     .map_err(|e| format!("Erreur d'exécution : {e}"))?
 }
 
+// ---------- Réglages : moteur de transcription ----------
+
+const CFG_PROVIDER: &str = "stt_provider";
+const CFG_ELEVEN_KEY: &str = "eleven_api_key";
+
+#[tauri::command]
+fn get_stt_provider(state: State<AppState>) -> Result<String, String> {
+    let conn = state.db.lock().map_err(|_| "verrou DB")?;
+    Ok(db::config_get(&conn, CFG_PROVIDER)?.unwrap_or_else(|| "local".into()))
+}
+
+#[tauri::command]
+fn set_stt_provider(state: State<AppState>, provider: String) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|_| "verrou DB")?;
+    db::config_set(&conn, CFG_PROVIDER, &provider)
+}
+
+#[tauri::command]
+fn eleven_key_present(state: State<AppState>) -> Result<bool, String> {
+    let conn = state.db.lock().map_err(|_| "verrou DB")?;
+    Ok(db::config_get(&conn, CFG_ELEVEN_KEY)?
+        .map(|k| !k.trim().is_empty())
+        .unwrap_or(false))
+}
+
+#[tauri::command]
+fn set_eleven_key(state: State<AppState>, key: String) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|_| "verrou DB")?;
+    db::config_set(&conn, CFG_ELEVEN_KEY, key.trim())
+}
+
+/// Transcription cloud via ElevenLabs (l'audio est envoyé à un service tiers).
+#[tauri::command]
+async fn transcribe_elevenlabs(
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<String, String> {
+    let key = {
+        let conn = state.db.lock().map_err(|_| "verrou DB")?;
+        db::config_get(&conn, CFG_ELEVEN_KEY)?.unwrap_or_default()
+    };
+    let key = key.trim().to_string();
+    if key.is_empty() {
+        return Err("Clé API ElevenLabs manquante (voir Réglages).".into());
+    }
+    let bytes = fs::read(&path).map_err(|e| e.to_string())?;
+    let part = reqwest::multipart::Part::bytes(bytes)
+        .file_name("audio.wav")
+        .mime_str("audio/wav")
+        .map_err(|e| e.to_string())?;
+    let form = reqwest::multipart::Form::new()
+        .part("file", part)
+        .text("model_id", "scribe_v2")
+        .text("language_code", "fra");
+    let resp = reqwest::Client::new()
+        .post("https://api.elevenlabs.io/v1/speech-to-text")
+        .header("xi-api-key", key)
+        .multipart(form)
+        .send()
+        .await
+        .map_err(|e| format!("Connexion à ElevenLabs impossible : {e}"))?;
+    let status = resp.status();
+    let body = resp.text().await.map_err(|e| e.to_string())?;
+    if !status.is_success() {
+        return Err(format!("ElevenLabs (HTTP {}) : {}", status.as_u16(), body));
+    }
+    let v: serde_json::Value = serde_json::from_str(&body).map_err(|e| e.to_string())?;
+    Ok(v.get("text")
+        .and_then(|t| t.as_str())
+        .unwrap_or_default()
+        .trim()
+        .to_string())
+}
+
+/// Télécharge le modèle Whisper français (mode local) dans le dossier de
+/// données, avec progression. L'app reste légère : le modèle n'est pas embarqué.
+#[tauri::command]
+async fn download_model(app: AppHandle) -> Result<String, String> {
+    use futures_util::StreamExt;
+    use std::io::Write;
+
+    let dir = models_dir(&app)?;
+    let dest = dir.join("ggml-large-v3-french.bin");
+    if dest.exists() {
+        return Ok(dest.display().to_string());
+    }
+    let url = "https://github.com/DR-Yoann-KIAVUE/CcvrTranscription/releases/download/model-fr-v1/ggml-large-v3-french.bin";
+    let resp = reqwest::Client::new()
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| format!("Téléchargement impossible : {e}"))?;
+    if !resp.status().is_success() {
+        return Err(format!("Téléchargement du modèle : HTTP {}", resp.status().as_u16()));
+    }
+    let total = resp.content_length().unwrap_or(0);
+    let tmp = dir.join("ggml-large-v3-french.bin.part");
+    let mut file = std::fs::File::create(&tmp).map_err(|e| e.to_string())?;
+    let mut downloaded: u64 = 0;
+    let mut last = -1i64;
+    let mut stream = resp.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| e.to_string())?;
+        file.write_all(&chunk).map_err(|e| e.to_string())?;
+        downloaded += chunk.len() as u64;
+        if total > 0 {
+            let pct = (downloaded * 100 / total) as i64;
+            if pct != last {
+                last = pct;
+                let _ = app.emit("model-download-progress", pct);
+            }
+        }
+    }
+    file.flush().map_err(|e| e.to_string())?;
+    drop(file);
+    std::fs::rename(&tmp, &dest).map_err(|e| e.to_string())?;
+    Ok(dest.display().to_string())
+}
+
 // ---------- Commandes : export granulaire ----------
 
 /// Écrit des octets bruts vers un chemin choisi par l'utilisateur (PDF, DOCX…).
@@ -450,6 +569,12 @@ pub fn run() {
             search_comptes_rendus,
             save_recording,
             transcribe,
+            get_stt_provider,
+            set_stt_provider,
+            eleven_key_present,
+            set_eleven_key,
+            transcribe_elevenlabs,
+            download_model,
             save_bytes,
             copy_file,
             data_stats,

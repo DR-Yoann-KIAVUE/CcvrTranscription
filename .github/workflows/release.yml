@@ -50,17 +50,8 @@ jobs:
           choco install llvm --no-progress -y
           echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
 
-      # Le modèle Whisper (~1 Go) est embarqué dans l'installeur (ressource
-      # Tauri). Il est trop gros pour git : le CI le télécharge ici.
-      - name: Modèle Whisper (embarqué)
-        shell: bash
-        run: |
-          mkdir -p src-tauri/models
-          curl -L --fail --retry 3 \
-            -o src-tauri/models/ggml-large-v3-french.bin \
-            https://github.com/DR-Yoann-KIAVUE/CcvrTranscription/releases/download/model-fr-v1/ggml-large-v3-french.bin
-          ls -lh src-tauri/models
-
+      # Le modèle Whisper n'est plus embarqué (app légère) : en mode local il
+      # est téléchargé à la demande ; en mode ElevenLabs il n'est pas requis.
       - name: Dépendances frontend
         run: npm ci
 
