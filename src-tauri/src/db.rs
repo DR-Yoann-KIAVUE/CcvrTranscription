@@ -257,7 +257,10 @@ pub fn create_compte_rendu(
     )
     .map_err(|e| e.to_string())?;
     let id = conn.last_insert_rowid();
-    add_version(conn, id, texte, origine, now)?;
+    // On n'archive une version que pour une (ré)génération, pas les autosaves.
+    if origine != "edition" {
+        add_version(conn, id, texte, origine, now)?;
+    }
     get_compte_rendu(conn, id)
 }
 
@@ -287,7 +290,7 @@ pub fn update_compte_rendu(
         params![id, titre, type_cr, date_consultation, texte, now],
     )
     .map_err(|e| e.to_string())?;
-    if previous.as_deref() != Some(texte) {
+    if origine != "edition" && previous.as_deref() != Some(texte) {
         add_version(conn, id, texte, origine, now)?;
     }
     get_compte_rendu(conn, id)

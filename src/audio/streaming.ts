@@ -39,6 +39,8 @@ export class StreamingTranscriber {
   private mute: GainNode | null = null;
   private source: MediaStreamAudioSourceNode | null = null;
   private chunks: Float32Array[] = [];
+  private ready = false;
+  private errored = false;
   private cb: Callbacks;
 
   constructor(cb: Callbacks) {
@@ -87,10 +89,16 @@ export class StreamingTranscriber {
           if (msg.text) this.cb.onFinal(msg.text);
           break;
         case "session_started":
+          this.ready = true;
           break;
         default:
           if (msg.message_type && msg.message_type.includes("error")) {
-            this.cb.onError(msg.error || msg.message_type);
+            // N'signale qu'une fois et arrête d'envoyer (évite le spam).
+            this.ready = false;
+            if (!this.errored) {
+              this.errored = true;
+              this.cb.onError(msg.error || msg.message_type);
+            }
           }
       }
     };
@@ -110,11 +118,12 @@ export class StreamingTranscriber {
         for (let i = 0; i < input.length; i++) sum += input[i] * input[i];
         this.cb.onLevel(Math.min(1, Math.sqrt(sum / input.length) * 3.2));
       }
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      if (this.ready && this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.ws.send(
           JSON.stringify({
-            type: "input_audio_chunk",
+            message_type: "input_audio_chunk",
             audio_base_64: pcm16Base64(copy),
+            commit: false,
             sample_rate: TARGET_RATE,
           })
         );
@@ -138,7 +147,12 @@ export class StreamingTranscriber {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       try {
         this.ws.send(
-          JSON.stringify({ type: "input_audio_chunk", audio_base_64: "", commit: true })
+          JSON.stringify({
+            message_type: "input_audio_chunk",
+            audio_base_64: "",
+            commit: true,
+            sample_rate: TARGET_RATE,
+          })
         );
       } catch {
         /* ignore */

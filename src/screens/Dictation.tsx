@@ -51,9 +51,12 @@ import { cn } from "@/lib/utils";
 import {
   ArrowLeft,
   Circle,
+  Cloud,
+  Cpu,
   Download,
   FileText,
   Loader2,
+  Pause,
   Play,
   RefreshCw,
   RotateCcw,
@@ -81,12 +84,12 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
   );
   const [html, setHtml] = useState(existing?.texte ?? "");
   const [audioPath, setAudioPath] = useState<string | null>(existing?.audio_path ?? null);
-  const [crId, setCrId] = useState<number | null>(existing?.id ?? null);
   const [modelOk, setModelOk] = useState(true);
   const [provider, setProvider] = useState<string>("local");
   const [keyPresent, setKeyPresent] = useState(true);
   const [editorKey, setEditorKey] = useState(0);
-  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [playing, setPlaying] = useState(false);
   const [versions, setVersions] = useState<CrVersion[]>([]);
   const [regenOpen, setRegenOpen] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
@@ -110,6 +113,11 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
   const streamerRef = useRef<StreamingTranscriber | null>(null);
   const finalRef = useRef("");
   const partialRef = useRef("");
+  const saveTimer = useRef<number | null>(null);
+  const firstRun = useRef(true);
+  const savingRef = useRef(false);
+  const pendingRef = useRef(false);
+  const crIdRef = useRef<number | null>(existing?.id ?? null);
 
   useEffect(() => {
     modelPresent().then(setModelOk).catch(() => setModelOk(false));
@@ -146,7 +154,6 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
 
   const applyType = (key: string) => {
     setTypeCr(key);
-    setDirty(true);
     const tmpl = templateHtml(key);
     if (!tmpl) return;
     const empty = blocksToPlainText(parseEditorHtml(html)).trim().length === 0;
@@ -237,7 +244,6 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
         if (text) {
           editorRef.current?.insertHtml(cleanTranscript(text));
           originRef.current = "transcription";
-          setDirty(true);
           toast.success("Transcription insérée. Relisez, corrigez, puis enregistrez.");
         } else {
           toast.error("Aucun texte transcrit (vérifiez le micro et la clé).");
@@ -258,9 +264,13 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
     }
   };
 
-  const transcribeInto = async (path: string, origine: Origine, mode: "insert" | "replace") => {
-    const provider = await getSttProvider().catch(() => "local");
-    const isCloud = provider === "elevenlabs";
+  const transcribeInto = async (
+    path: string,
+    origine: Origine,
+    mode: "insert" | "replace",
+    engine: "local" | "elevenlabs"
+  ) => {
+    const isCloud = engine === "elevenlabs";
     setCloud(isCloud);
     setProgress(0);
     setTranscribing(true);
@@ -271,12 +281,10 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
       const text = isCloud
         ? await transcribeElevenlabs(path)
         : await transcribe(path);
-      const cleaned = cleanTranscript(text);
-      if (mode === "replace") setEditorHtml(cleaned);
-      else if (text) editorRef.current?.insertHtml(cleaned);
+      if (mode === "replace") setEditorHtml(cleanTranscript(text));
+      else if (text) editorRef.current?.insertHtml(cleanTranscript(text));
       originRef.current = origine;
-      setDirty(true);
-      if (text) toast.success("Transcription insérée. Relisez, corrigez, puis enregistrez.");
+      if (text) toast.success("Transcription insérée. Relisez et corrigez si besoin.");
       else toast.error("Transcription vide, vérifiez le micro et réessayez.");
     } catch (e) {
       toast.error(String(e));
@@ -291,23 +299,33 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
       const name = `p${patient.id}-${Date.now()}`;
       const path = await saveRecording(result.wav, name);
       setAudioPath(path);
-      await transcribeInto(path, "transcription", "insert");
+      const engine =
+        (await getSttProvider().catch(() => "local")) === "elevenlabs"
+          ? "elevenlabs"
+          : "local";
+      await transcribeInto(path, "transcription", "insert", engine);
     } catch (e) {
       toast.error(String(e));
     }
   };
 
-  const doRegenerate = async () => {
+  const doRegenerate = async (engine: "local" | "elevenlabs") => {
     setRegenOpen(false);
     if (!audioPath) return;
-    await transcribeInto(audioPath, "regeneration", "replace");
+    await transcribeInto(audioPath, "regeneration", "replace", engine);
   };
 
-  const save = async () => {
+  const doSave = async () => {
+    if (savingRef.current) {
+      pendingRef.current = true;
+      return;
+    }
+    savingRef.current = true;
+    setSaving(true);
     try {
-      let saved: CompteRendu;
-      if (crId == null) {
-        saved = await createCompteRendu({
+      let s: CompteRendu;
+      if (crIdRef.current == null) {
+        s = await createCompteRendu({
           patientId: patient.id,
           titre,
           typeCr,
@@ -316,10 +334,10 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
           audioPath,
           origine: originRef.current,
         });
-        setCrId(saved.id);
+        crIdRef.current = s.id;
       } else {
-        saved = await updateCompteRendu({
-          id: crId,
+        s = await updateCompteRendu({
+          id: crIdRef.current,
           titre,
           typeCr,
           dateConsultation: dateConsult,
@@ -328,23 +346,64 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
         });
       }
       originRef.current = "edition";
-      setDirty(false);
-      toast.success("Compte-rendu enregistré.");
-      await loadVersions(saved.id);
-      onSaved(saved);
+      await loadVersions(s.id);
+      onSaved(s);
     } catch (e) {
-      toast.error(String(e));
+      toast.error("Enregistrement : " + String(e));
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+      if (pendingRef.current) {
+        pendingRef.current = false;
+        void doSave();
+      }
     }
   };
 
+  // Autosave : toute modification (texte, titre, type, date, audio) est
+  // enregistrée automatiquement, sans bouton.
+  useEffect(() => {
+    if (firstRun.current) {
+      firstRun.current = false;
+      return;
+    }
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(() => void doSave(), 600);
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [html, titre, typeCr, dateConsult, audioPath]);
+
+  // Élément audio unique + état play/pause synchronisé.
+  useEffect(() => {
+    const el = new Audio();
+    audioElRef.current = el;
+    const onPlay = () => setPlaying(true);
+    const onStop = () => setPlaying(false);
+    el.addEventListener("play", onPlay);
+    el.addEventListener("pause", onStop);
+    el.addEventListener("ended", onStop);
+    return () => {
+      el.pause();
+      el.removeEventListener("play", onPlay);
+      el.removeEventListener("pause", onStop);
+      el.removeEventListener("ended", onStop);
+    };
+  }, []);
+
   const replay = async () => {
     if (!audioPath) return;
+    const el = audioElRef.current;
+    if (!el) return;
     try {
       const src = convertFileSrc(audioPath);
-      if (!audioElRef.current) audioElRef.current = new Audio();
-      audioElRef.current.src = src;
-      audioElRef.current.load();
-      await audioElRef.current.play();
+      if (el.src !== src) {
+        el.src = src;
+        el.load();
+      }
+      if (el.paused) await el.play();
+      else el.pause();
     } catch (e) {
       toast.error("Réécoute impossible : " + String(e));
     }
@@ -359,7 +418,6 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
       return;
     originRef.current = "edition";
     setEditorHtml(v.texte);
-    setDirty(true);
     toast.success("Version restaurée. Enregistrez pour la conserver.");
   };
 
@@ -421,7 +479,6 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
           value={titre}
           onChange={(e) => {
             setTitre(e.target.value);
-            setDirty(true);
           }}
           placeholder="Titre du compte-rendu"
         />
@@ -443,22 +500,19 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
           value={dateConsult}
           onChange={(e) => {
             setDateConsult(e.target.value);
-            setDirty(true);
           }}
         />
         <Badge
           variant="outline"
           className={cn(
             "gap-1.5",
-            dirty ? "border-warning/40 text-warning" : "border-success/40 text-success"
+            saving ? "border-warning/40 text-warning" : "border-success/40 text-success"
           )}
+          title="Enregistrement automatique"
         >
-          <Circle className={cn("size-2 fill-current")} />
-          {dirty ? "Non enregistré" : "Enregistré"}
+          <Circle className={cn("size-2 fill-current", saving && "animate-pulse")} />
+          {saving ? "Enregistrement…" : "Enregistré"}
         </Badge>
-        <Button onClick={save} disabled={transcribing}>
-          Enregistrer
-        </Button>
       </header>
 
       <div className="flex-1 overflow-y-auto bg-muted/40 p-6">
@@ -493,7 +547,15 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
                   className="text-white hover:bg-white/10 hover:text-white"
                   onClick={replay}
                 >
-                  <Play className="size-4" /> Réécouter
+                  {playing ? (
+                    <>
+                      <Pause className="size-4" /> Pause
+                    </>
+                  ) : (
+                    <>
+                      <Play className="size-4" /> Réécouter
+                    </>
+                  )}
                 </Button>
               )}
               <div className="flex-1" />
@@ -502,9 +564,9 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
                   variant="ghost"
                   className="text-white hover:bg-white/10 hover:text-white"
                   onClick={() => setRegenOpen(true)}
-                  disabled={transcribing || (provider === "local" && !modelOk)}
+                  disabled={transcribing}
                 >
-                  <RefreshCw className="size-4" /> Régénérer le texte depuis l'audio
+                  <RefreshCw className="size-4" /> Régénérer le texte…
                 </Button>
               )}
             </>
@@ -603,7 +665,6 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
               onChange={(h) => {
                 setHtml(h);
                 originRef.current = "edition";
-                setDirty(true);
               }}
             />
           </div>
@@ -678,14 +739,26 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
             Le texte actuel sera remplacé par une nouvelle transcription de
-            l'audio. La version actuelle sera conservée dans l'historique et
-            restera restaurable.
+            l'audio. La version actuelle est conservée dans l'historique
+            (restaurable). Choisissez le moteur :
           </p>
-          <DialogFooter>
+          <DialogFooter className="sm:justify-between">
             <Button variant="outline" onClick={() => setRegenOpen(false)}>
               Annuler
             </Button>
-            <Button onClick={doRegenerate}>Régénérer</Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => doRegenerate("local")}
+                disabled={!modelOk}
+                title={!modelOk ? "Modèle local non installé (Réglages)" : undefined}
+              >
+                <Cpu className="size-4" /> Whisper local
+              </Button>
+              <Button onClick={() => doRegenerate("elevenlabs")}>
+                <Cloud className="size-4" /> ElevenLabs
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
