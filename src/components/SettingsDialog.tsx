@@ -5,9 +5,11 @@ import {
   downloadModel,
   elevenKeyPresent,
   getSttProvider,
+  getSttStreaming,
   modelPresent,
   setElevenKey,
   setSttProvider,
+  setSttStreaming,
   type SttProvider,
 } from "../api";
 import {
@@ -38,13 +40,25 @@ export function SettingsDialog({
   const [keyInput, setKeyInput] = useState("");
   const [hasModel, setHasModel] = useState(true);
   const [dlProgress, setDlProgress] = useState<number | null>(null);
+  const [streaming, setStreaming] = useState(true);
 
   useEffect(() => {
     if (!open) return;
     getSttProvider().then((p) => setProvider(p)).catch(() => {});
     elevenKeyPresent().then(setKeyPresent).catch(() => {});
     modelPresent().then(setHasModel).catch(() => setHasModel(false));
+    getSttStreaming().then(setStreaming).catch(() => {});
   }, [open]);
+
+  const toggleStreaming = async (on: boolean) => {
+    setStreaming(on);
+    try {
+      await setSttStreaming(on);
+      onChanged?.();
+    } catch (e) {
+      toast.error(String(e));
+    }
+  };
 
   const changeProvider = async (cloud: boolean) => {
     const p: SttProvider = cloud ? "elevenlabs" : "local";
@@ -154,6 +168,19 @@ export function SettingsDialog({
               <p className="text-xs text-muted-foreground">
                 La clé est stockée localement sur cet ordinateur, jamais partagée.
               </p>
+            </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div>
+                <div className="text-sm font-semibold">
+                  Transcription en temps réel (streaming)
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {streaming
+                    ? "Le texte s'affiche au fil de la parole (WebSocket)."
+                    : "Transcription après l'arrêt de la dictée (envoi du fichier)."}
+                </div>
+              </div>
+              <Switch checked={streaming} onCheckedChange={toggleStreaming} />
             </div>
           </>
         ) : (

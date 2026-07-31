@@ -305,6 +305,7 @@ async fn transcribe(app: AppHandle, path: String) -> Result<String, String> {
 
 const CFG_PROVIDER: &str = "stt_provider";
 const CFG_ELEVEN_KEY: &str = "eleven_api_key";
+const CFG_STREAMING: &str = "stt_streaming";
 
 #[tauri::command]
 fn get_stt_provider(state: State<AppState>) -> Result<String, String> {
@@ -330,6 +331,50 @@ fn eleven_key_present(state: State<AppState>) -> Result<bool, String> {
 fn set_eleven_key(state: State<AppState>, key: String) -> Result<(), String> {
     let conn = state.db.lock().map_err(|_| "verrou DB")?;
     db::config_set(&conn, CFG_ELEVEN_KEY, key.trim())
+}
+
+#[tauri::command]
+fn get_stt_streaming(state: State<AppState>) -> Result<bool, String> {
+    let conn = state.db.lock().map_err(|_| "verrou DB")?;
+    Ok(db::config_get(&conn, CFG_STREAMING)?
+        .map(|v| v != "off")
+        .unwrap_or(true))
+}
+
+#[tauri::command]
+fn set_stt_streaming(state: State<AppState>, on: bool) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|_| "verrou DB")?;
+    db::config_set(&conn, CFG_STREAMING, if on { "on" } else { "off" })
+}
+
+/// Crée un token ElevenLabs à usage unique (15 min) pour le streaming temps
+/// réel côté client. La clé API reste côté Rust ; seul le token va au frontend.
+#[tauri::command]
+async fn eleven_realtime_token(state: State<'_, AppState>) -> Result<String, String> {
+    let key = {
+        let conn = state.db.lock().map_err(|_| "verrou DB")?;
+        db::config_get(&conn, CFG_ELEVEN_KEY)?.unwrap_or_default()
+    };
+    let key = key.trim().to_string();
+    if key.is_empty() {
+        return Err("Clé API ElevenLabs manquante (voir Réglages).".into());
+    }
+    let resp = reqwest::Client::new()
+        .post("https://api.elevenlabs.io/v1/single-use-token/realtime_scribe")
+        .header("xi-api-key", key)
+        .send()
+        .await
+        .map_err(|e| format!("Connexion à ElevenLabs impossible : {e}"))?;
+    let status = resp.status();
+    let body = resp.text().await.map_err(|e| e.to_string())?;
+    if !status.is_success() {
+        return Err(format!("Token ElevenLabs (HTTP {}) : {}", status.as_u16(), body));
+    }
+    let v: serde_json::Value = serde_json::from_str(&body).map_err(|e| e.to_string())?;
+    v.get("token")
+        .and_then(|t| t.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| "Réponse token ElevenLabs invalide.".into())
 }
 
 /// Transcription cloud via ElevenLabs (l'audio est envoyé à un service tiers).
@@ -573,6 +618,9 @@ pub fn run() {
             set_stt_provider,
             eleven_key_present,
             set_eleven_key,
+            get_stt_streaming,
+            set_stt_streaming,
+            eleven_realtime_token,
             transcribe_elevenlabs,
             download_model,
             save_bytes,

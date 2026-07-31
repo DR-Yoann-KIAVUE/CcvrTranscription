@@ -7,7 +7,9 @@ import {
   copyFile,
   createCompteRendu,
   elevenKeyPresent,
+  elevenRealtimeToken,
   getSttProvider,
+  getSttStreaming,
   listCrVersions,
   modelPresent,
   saveBytes,
@@ -19,6 +21,7 @@ import {
 } from "../api";
 import type { CompteRendu, CrVersion, Patient } from "../types";
 import { AudioRecorder, type RecordingResult } from "../audio/recorder";
+import { StreamingTranscriber } from "../audio/streaming";
 import { cleanTranscript } from "../cleanup";
 import { REPORT_TYPES, reportTypeLabel, templateHtml } from "../reportTypes";
 import { formatDateTime, formatDuration, todayInputValue } from "../format";
@@ -94,11 +97,19 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
   const [seconds, setSeconds] = useState(0);
   const [level, setLevel] = useState(0);
 
+  // Streaming temps réel (ElevenLabs)
+  const [streamingMode, setStreamingMode] = useState(false);
+  const [liveFinal, setLiveFinal] = useState("");
+  const [livePartial, setLivePartial] = useState("");
+
   const audioElRef = useRef<HTMLAudioElement | null>(null);
   const originRef = useRef<Origine>("edition");
   const editorRef = useRef<EditorHandle>(null);
   const recorderRef = useRef<AudioRecorder | null>(null);
   const timerRef = useRef<number | null>(null);
+  const streamerRef = useRef<StreamingTranscriber | null>(null);
+  const finalRef = useRef("");
+  const partialRef = useRef("");
 
   useEffect(() => {
     modelPresent().then(setModelOk).catch(() => setModelOk(false));
@@ -150,24 +161,94 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
     }
   };
 
+  const startTimer = () => {
+    setSeconds(0);
+    setRecording(true);
+    timerRef.current = window.setInterval(() => setSeconds((s) => s + 1), 1000);
+  };
+
   const startRecording = async () => {
+    const prov = await getSttProvider().catch(() => "local");
+    const streaming =
+      prov === "elevenlabs" ? await getSttStreaming().catch(() => true) : false;
+
+    if (streaming) {
+      // ---- Streaming temps réel ElevenLabs ----
+      try {
+        const token = await elevenRealtimeToken();
+        finalRef.current = "";
+        partialRef.current = "";
+        setLiveFinal("");
+        setLivePartial("");
+        const st = new StreamingTranscriber({
+          onPartial: (t) => {
+            partialRef.current = t;
+            setLivePartial(t);
+          },
+          onFinal: (t) => {
+            finalRef.current = (finalRef.current ? finalRef.current + " " : "") + t;
+            partialRef.current = "";
+            setLiveFinal(finalRef.current);
+            setLivePartial("");
+          },
+          onError: (m) => toast.error("ElevenLabs : " + m),
+          onLevel: setLevel,
+        });
+        await st.start(token);
+        streamerRef.current = st;
+        setStreamingMode(true);
+        startTimer();
+      } catch (e) {
+        toast.error("Streaming impossible : " + String(e));
+      }
+      return;
+    }
+
+    // ---- Enregistrement classique (local, ou cloud en différé) ----
     try {
       const rec = new AudioRecorder(setLevel);
       await rec.start();
       recorderRef.current = rec;
-      setSeconds(0);
-      setRecording(true);
-      timerRef.current = window.setInterval(() => setSeconds((s) => s + 1), 1000);
+      setStreamingMode(false);
+      startTimer();
     } catch (e) {
       toast.error("Micro inaccessible : " + String(e));
     }
   };
 
   const stopRecording = async () => {
-    if (!recorderRef.current) return;
     if (timerRef.current) window.clearInterval(timerRef.current);
     setRecording(false);
     setLevel(0);
+
+    if (streamerRef.current) {
+      // Fin du streaming : récupère l'audio + le texte accumulé.
+      try {
+        const { wav } = await streamerRef.current.stop();
+        streamerRef.current = null;
+        setStreamingMode(false);
+        const name = `p${patient.id}-${Date.now()}`;
+        const path = await saveRecording(wav, name);
+        setAudioPath(path);
+        const text = (
+          finalRef.current + (partialRef.current ? " " + partialRef.current : "")
+        ).trim();
+        setLivePartial("");
+        if (text) {
+          editorRef.current?.insertHtml(cleanTranscript(text));
+          originRef.current = "transcription";
+          setDirty(true);
+          toast.success("Transcription insérée. Relisez, corrigez, puis enregistrez.");
+        } else {
+          toast.error("Aucun texte transcrit (vérifiez le micro et la clé).");
+        }
+      } catch (e) {
+        toast.error(String(e));
+      }
+      return;
+    }
+
+    if (!recorderRef.current) return;
     try {
       const result = await recorderRef.current.stop();
       recorderRef.current = null;
@@ -429,6 +510,22 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
             </>
           )}
         </div>
+
+        {/* Transcription en direct (streaming) */}
+        {streamingMode && (recording || liveFinal || livePartial) && (
+          <Card className="mb-5 p-4">
+            <div className="mb-1.5 flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+              <span className="size-2 animate-pulse rounded-full bg-primary" />
+              Transcription en direct
+            </div>
+            <p className="text-sm leading-relaxed">
+              {liveFinal} <span className="text-muted-foreground">{livePartial}</span>
+              {!liveFinal && !livePartial && (
+                <span className="text-muted-foreground">Parlez…</span>
+              )}
+            </p>
+          </Card>
+        )}
 
         {/* Clé ElevenLabs manquante (mode cloud) */}
         {provider === "elevenlabs" && !keyPresent && (

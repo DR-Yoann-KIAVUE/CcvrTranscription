@@ -98,6 +98,11 @@ export const setSttProvider = (provider: SttProvider) =>
 export const elevenKeyPresent = () => invoke<boolean>("eleven_key_present");
 export const setElevenKey = (key: string) =>
   invoke<void>("set_eleven_key", { key });
+export const getSttStreaming = () => invoke<boolean>("get_stt_streaming");
+export const setSttStreaming = (on: boolean) =>
+  invoke<void>("set_stt_streaming", { on });
+export const elevenRealtimeToken = () =>
+  invoke<string>("eleven_realtime_token");
 export const downloadModel = () => invoke<string>("download_model");
 
 // ---- Export granulaire ----

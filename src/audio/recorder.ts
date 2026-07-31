@@ -125,7 +125,7 @@ async function resampleTo16k(
   return rendered.getChannelData(0);
 }
 
-function encodeWav(samples: Float32Array, sampleRate: number): Uint8Array {
+export function encodeWav(samples: Float32Array, sampleRate: number): Uint8Array {
   const bytesPerSample = 2;
   const blockAlign = bytesPerSample; // mono
   const dataSize = samples.length * bytesPerSample;
