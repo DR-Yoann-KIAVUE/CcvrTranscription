@@ -23,6 +23,11 @@ export class AudioRecorder {
     this.onLevel = onLevel;
   }
 
+  /** Flux micro brut (pour l'indicateur de voix). */
+  getStream(): MediaStream | null {
+    return this.stream;
+  }
+
   async start(): Promise<void> {
     this.stream = await navigator.mediaDevices.getUserMedia({
       audio: {

@@ -47,6 +47,11 @@ export class StreamingTranscriber {
     this.cb = cb;
   }
 
+  /** Flux micro brut (pour l'indicateur de voix). */
+  getStream(): MediaStream | null {
+    return this.stream;
+  }
+
   async start(token: string): Promise<void> {
     // Micro + contexte directement en 16 kHz (pas de rééchantillonnage).
     this.stream = await navigator.mediaDevices.getUserMedia({

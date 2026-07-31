@@ -14,6 +14,7 @@ import type { CompteRendu, Patient, SearchHit } from "../types";
 import { formatDate } from "../format";
 import { reportTypeLabel } from "../reportTypes";
 import { LogoMark } from "@/components/Logo";
+import { PatientAvatar } from "@/components/PatientAvatar";
 import { DataDialog } from "@/components/DataDialog";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { Button } from "@/components/ui/button";
@@ -27,7 +28,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { Database, Lock, Plus, Search, Settings } from "lucide-react";
+import { Database, Lock, Plus, Search, Settings, Trash2 } from "lucide-react";
 
 interface Props {
   onOpen: (patient: Patient, existing: CompteRendu | null) => void;
@@ -223,35 +224,47 @@ export default function Library({ onOpen, onLogout, refreshKey }: Props) {
               </div>
             )}
           </div>
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto p-2">
             {patients.map((p) => (
               <button
                 key={p.id}
                 className={cn(
-                  "block w-full border-b px-4 py-3 text-left transition-colors hover:bg-card",
-                  selected?.id === p.id && "border-l-2 border-l-primary bg-accent"
+                  "group relative flex w-full items-center gap-3 rounded-lg px-2.5 py-2.5 text-left transition-colors hover:bg-card",
+                  selected?.id === p.id
+                    ? "bg-accent ring-1 ring-primary/15"
+                    : "ring-1 ring-transparent"
                 )}
                 onClick={() => {
                   setSelected(p);
                   setContentQuery("");
                 }}
               >
-                <div className="text-sm font-semibold">{p.nom}</div>
-                <div className="mt-0.5 text-xs text-muted-foreground">
-                  {patientSub(p)}
-                  {"  ·  "}
-                  <span
-                    className="cursor-pointer text-destructive hover:underline"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removePatient(p);
-                    }}
-                  >
-                    supprimer
-                  </span>
+                <PatientAvatar name={p.nom} className="size-9 text-xs" />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold">{p.nom}</div>
+                  <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                    {patientSub(p)}
+                  </div>
                 </div>
+                <span
+                  role="button"
+                  tabIndex={-1}
+                  className="shrink-0 rounded-md p-1 text-muted-foreground opacity-0 transition hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                  title="Supprimer le patient"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removePatient(p);
+                  }}
+                >
+                  <Trash2 className="size-3.5" />
+                </span>
               </button>
             ))}
+            {patients.length === 0 && (
+              <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+                Aucun patient. Cliquez sur « Nouveau ».
+              </p>
+            )}
           </div>
         </aside>
 
@@ -368,13 +381,16 @@ function PatientView({
 }) {
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="mb-5 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{patient.nom}</h1>
-          <div className="mt-1 text-sm text-muted-foreground">{subLine}</div>
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <PatientAvatar name={patient.nom} className="size-14 text-lg" />
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">{patient.nom}</h1>
+            <div className="mt-1 text-sm text-muted-foreground">{subLine}</div>
+          </div>
         </div>
-        <Button variant="outline" onClick={() => onOpen(patient, null)}>
-          Nouvelle dictée pour ce patient
+        <Button onClick={() => onOpen(patient, null)}>
+          <Plus className="size-4" /> Nouvelle dictée
         </Button>
       </div>
 

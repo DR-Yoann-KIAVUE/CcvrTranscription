@@ -28,6 +28,7 @@ import { buildDocx } from "../export/docx";
 import { buildPdf } from "../export/pdf";
 import { blocksToPlainText, parseEditorHtml } from "../export/parse";
 import Editor, { type EditorHandle } from "./Editor";
+import { BarVisualizer } from "@/components/ui/bar-visualizer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -89,7 +90,7 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
 
   const [recording, setRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
-  const [level, setLevel] = useState(0);
+  const [micStream, setMicStream] = useState<MediaStream | null>(null);
 
   // Streaming temps réel (ElevenLabs)
   const [streamingMode, setStreamingMode] = useState(false);
@@ -173,10 +174,10 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
             setLivePartial("");
           },
           onError: (m) => toast.error("ElevenLabs : " + m),
-          onLevel: setLevel,
         });
         await st.start(token);
         streamerRef.current = st;
+        setMicStream(st.getStream());
         setStreamingMode(true);
         startTimer();
       } catch (e) {
@@ -187,9 +188,10 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
 
     // ---- Enregistrement classique (local, ou cloud en différé) ----
     try {
-      const rec = new AudioRecorder(setLevel);
+      const rec = new AudioRecorder();
       await rec.start();
       recorderRef.current = rec;
+      setMicStream(rec.getStream());
       setStreamingMode(false);
       startTimer();
     } catch (e) {
@@ -200,7 +202,7 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
   const stopRecording = async () => {
     if (timerRef.current) window.clearInterval(timerRef.current);
     setRecording(false);
-    setLevel(0);
+    setMicStream(null);
 
     if (streamerRef.current) {
       // Fin du streaming : récupère l'audio + le texte accumulé.
@@ -478,73 +480,126 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
       </header>
 
       <div className="flex-1 overflow-y-auto bg-muted/40 p-6">
-        {/* Bandeau de dictée (sombre) */}
-        <div className="mb-5 flex items-center gap-4 rounded-xl bg-foreground px-4 py-3 text-background">
-          {recording ? (
-            <>
-              <Button variant="destructive" onClick={stopRecording}>
-                <Square className="size-4 fill-current" /> Arrêter et transcrire
-              </Button>
-              <span className="size-2.5 animate-pulse rounded-full bg-destructive" />
-              <span className="font-mono text-xl font-medium tabular-nums">
-                {formatDuration(seconds)}
-              </span>
-              <div className="h-1.5 w-32 overflow-hidden rounded-full bg-white/15">
-                <div
-                  className="h-full bg-primary transition-[width] duration-75"
-                  style={{ width: `${Math.round(level * 100)}%` }}
-                />
-              </div>
-              <span className="font-mono text-xs text-white/60">Micro actif</span>
-            </>
-          ) : (
-            <>
-              <Button variant="destructive" onClick={startRecording} disabled={transcribing}>
-                <Circle className="size-3.5 fill-current" />
-                {audioPath ? "Reprendre la dictée" : "Démarrer la dictée"}
-              </Button>
-              {audioPath && (
+        {/* Studio de dictée */}
+        <div className="relative mb-5 overflow-hidden rounded-2xl bg-foreground text-background shadow-xl shadow-black/10 ring-1 ring-white/5">
+          <div
+            className={cn(
+              "absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent to-transparent transition-colors",
+              recording ? "via-primary" : "via-white/20"
+            )}
+          />
+          <div className="flex items-center gap-4 px-5 py-3.5">
+            {recording ? (
+              <>
                 <Button
-                  variant="ghost"
-                  className="text-white hover:bg-white/10 hover:text-white"
-                  onClick={replay}
+                  variant="destructive"
+                  className="rounded-full shadow-sm"
+                  onClick={stopRecording}
                 >
-                  {playing ? (
-                    <>
-                      <Pause className="size-4" /> Pause
-                    </>
-                  ) : (
-                    <>
-                      <Play className="size-4" /> Réécouter
-                    </>
-                  )}
+                  <Square className="size-4 fill-current" /> Arrêter et transcrire
                 </Button>
-              )}
-              <div className="flex-1" />
-              {audioPath && (
+                <div className="flex items-center gap-2">
+                  <span className="size-2.5 animate-pulse rounded-full bg-destructive shadow-[0_0_0_4px] shadow-destructive/20" />
+                  <span className="font-mono text-lg font-medium tabular-nums">
+                    {formatDuration(seconds)}
+                  </span>
+                </div>
+                <div className="h-9 min-w-0 flex-1 text-primary">
+                  <BarVisualizer
+                    state="speaking"
+                    barCount={56}
+                    minHeight={6}
+                    centerAlign
+                    mediaStream={micStream}
+                  />
+                </div>
+                <span className="hidden shrink-0 pl-1 font-mono text-[11px] uppercase tracking-wider text-background/50 lg:inline">
+                  {streamingMode ? "En direct" : "Micro actif"}
+                </span>
+              </>
+            ) : (
+              <>
                 <Button
-                  variant="ghost"
-                  className="text-white hover:bg-white/10 hover:text-white"
-                  onClick={() => setRegenOpen(true)}
+                  variant="destructive"
+                  className="rounded-full shadow-sm"
+                  onClick={startRecording}
                   disabled={transcribing}
                 >
-                  <RefreshCw className="size-4" /> Régénérer le texte…
+                  <Circle className="size-3.5 fill-current" />
+                  {audioPath ? "Reprendre la dictée" : "Démarrer la dictée"}
                 </Button>
-              )}
-            </>
-          )}
+                {audioPath && (
+                  <Button
+                    variant="ghost"
+                    className="rounded-full text-background hover:bg-white/10 hover:text-background"
+                    onClick={replay}
+                  >
+                    {playing ? (
+                      <>
+                        <Pause className="size-4" /> Pause
+                      </>
+                    ) : (
+                      <>
+                        <Play className="size-4" /> Réécouter
+                      </>
+                    )}
+                  </Button>
+                )}
+                <div
+                  className={cn(
+                    "h-9 min-w-0 flex-1",
+                    playing ? "text-background/70" : "text-background/20"
+                  )}
+                >
+                  <BarVisualizer
+                    demo
+                    state={playing ? "speaking" : undefined}
+                    barCount={56}
+                    minHeight={6}
+                    centerAlign
+                  />
+                </div>
+                {audioPath && (
+                  <Button
+                    variant="ghost"
+                    className="shrink-0 rounded-full text-background hover:bg-white/10 hover:text-background"
+                    onClick={() => setRegenOpen(true)}
+                    disabled={transcribing}
+                  >
+                    <RefreshCw className="size-4" /> Régénérer le texte…
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
         </div>
 
         {/* Transcription en direct (streaming) */}
         {streamingMode && (recording || liveFinal || livePartial) && (
-          <Card className="mb-5 p-4">
-            <div className="mb-1.5 flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-              <span className="size-2 animate-pulse rounded-full bg-primary" />
-              Transcription en direct
+          <Card className="mb-5 border-primary/20 bg-accent/40 p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-accent-foreground">
+                <span className="size-2 animate-pulse rounded-full bg-primary" />
+                Transcription en direct
+              </div>
+              {recording && (
+                <div className="h-4 w-16 text-primary/70">
+                  <BarVisualizer
+                    state="speaking"
+                    barCount={20}
+                    minHeight={10}
+                    centerAlign
+                    mediaStream={micStream}
+                  />
+                </div>
+              )}
             </div>
             <p className="text-sm leading-relaxed">
               {liveFinal} <span className="text-muted-foreground">{livePartial}</span>
-              {!liveFinal && !livePartial && (
+              {recording && (
+                <span className="ml-0.5 inline-block h-4 w-px animate-pulse bg-primary align-middle" />
+              )}
+              {!liveFinal && !livePartial && !recording && (
                 <span className="text-muted-foreground">Parlez…</span>
               )}
             </p>

@@ -45,16 +45,20 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-muted/40 p-6">
-      <div className="flex flex-col items-center gap-2 text-center">
-        <LogoMark className="size-9 text-primary" />
-        <h1 className="text-xl font-semibold tracking-tight">CCVR Dictée</h1>
-        <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-          Clinique Cardiovasculaire Raphaëloise
-        </p>
+    <div className="flex min-h-screen flex-col items-center justify-center gap-7 p-6">
+      <div className="flex flex-col items-center gap-3 text-center">
+        <span className="flex size-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">
+          <LogoMark className="size-7" />
+        </span>
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">CCVR Dictée</h1>
+          <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+            Clinique Cardiovasculaire Raphaëloise
+          </p>
+        </div>
       </div>
 
-      <Card className="w-[380px]">
+      <Card className="w-[380px] border-border/70 shadow-xl shadow-black/5 backdrop-blur-sm">
         <CardContent className="pt-6">
           <form onSubmit={submit} className="flex flex-col gap-4">
             {configured === null ? (
