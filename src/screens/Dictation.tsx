@@ -23,7 +23,6 @@ import type { CompteRendu, CrVersion, Patient } from "../types";
 import { AudioRecorder, type RecordingResult } from "../audio/recorder";
 import { StreamingTranscriber } from "../audio/streaming";
 import { cleanTranscript } from "../cleanup";
-import { REPORT_TYPES, reportTypeLabel, templateHtml } from "../reportTypes";
 import { formatDateTime, formatDuration, todayInputValue } from "../format";
 import { buildDocx } from "../export/docx";
 import { buildPdf } from "../export/pdf";
@@ -33,13 +32,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -78,7 +70,6 @@ const ORIGINE_LABEL: Record<Origine, string> = {
 
 export default function Dictation({ patient, existing, onBack, onSaved }: Props) {
   const [titre, setTitre] = useState(existing?.titre ?? "Consultation");
-  const [typeCr, setTypeCr] = useState<string>(existing?.type_cr ?? "consultation");
   const [dateConsult, setDateConsult] = useState(
     existing?.date_consultation ?? todayInputValue()
   );
@@ -134,7 +125,6 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
     patient: patient.nom,
     dateConsultation: dateConsult,
     titre,
-    type: reportTypeLabel(typeCr),
   });
   const defaultBase = () =>
     `${patient.nom}_${dateConsult}_${titre}`.replace(/\s+/g, "-").replace(/[^\w\-]/g, "");
@@ -150,22 +140,6 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
   const setEditorHtml = (next: string) => {
     setHtml(next);
     setEditorKey((k) => k + 1);
-  };
-
-  const applyType = (key: string) => {
-    setTypeCr(key);
-    const tmpl = templateHtml(key);
-    if (!tmpl) return;
-    const empty = blocksToPlainText(parseEditorHtml(html)).trim().length === 0;
-    if (
-      empty ||
-      window.confirm(
-        `Appliquer la trame « ${reportTypeLabel(key)} » ? Le contenu actuel de l'éditeur sera remplacé par les sections de ce type.`
-      )
-    ) {
-      originRef.current = "edition";
-      setEditorHtml(tmpl);
-    }
   };
 
   const startTimer = () => {
@@ -328,7 +302,7 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
         s = await createCompteRendu({
           patientId: patient.id,
           titre,
-          typeCr,
+          typeCr: null,
           dateConsultation: dateConsult,
           texte: html,
           audioPath,
@@ -339,7 +313,7 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
         s = await updateCompteRendu({
           id: crIdRef.current,
           titre,
-          typeCr,
+          typeCr: null,
           dateConsultation: dateConsult,
           texte: html,
           origine: originRef.current,
@@ -360,7 +334,7 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
     }
   };
 
-  // Autosave : toute modification (texte, titre, type, date, audio) est
+  // Autosave : toute modification (texte, titre, date, audio) est
   // enregistrée automatiquement, sans bouton.
   useEffect(() => {
     if (firstRun.current) {
@@ -373,7 +347,7 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [html, titre, typeCr, dateConsult, audioPath]);
+  }, [html, titre, dateConsult, audioPath]);
 
   // Élément audio unique + état play/pause synchronisé.
   useEffect(() => {
@@ -482,18 +456,6 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
           }}
           placeholder="Titre du compte-rendu"
         />
-        <Select value={typeCr} onValueChange={applyType}>
-          <SelectTrigger className="w-[240px]" title="Type de compte-rendu">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {REPORT_TYPES.map((t) => (
-              <SelectItem key={t.key} value={t.key}>
-                {t.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
         <Input
           type="date"
           className="w-[150px]"
