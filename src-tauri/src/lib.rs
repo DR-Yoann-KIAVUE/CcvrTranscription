@@ -309,7 +309,7 @@ const CFG_ELEVEN_KEY: &str = "eleven_api_key";
 #[tauri::command]
 fn get_stt_provider(state: State<AppState>) -> Result<String, String> {
     let conn = state.db.lock().map_err(|_| "verrou DB")?;
-    Ok(db::config_get(&conn, CFG_PROVIDER)?.unwrap_or_else(|| "local".into()))
+    Ok(db::config_get(&conn, CFG_PROVIDER)?.unwrap_or_else(|| "elevenlabs".into()))
 }
 
 #[tauri::command]

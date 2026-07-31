@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import {
   copyFile,
   createCompteRendu,
+  elevenKeyPresent,
   getSttProvider,
   listCrVersions,
   modelPresent,
@@ -80,6 +81,7 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
   const [crId, setCrId] = useState<number | null>(existing?.id ?? null);
   const [modelOk, setModelOk] = useState(true);
   const [provider, setProvider] = useState<string>("local");
+  const [keyPresent, setKeyPresent] = useState(true);
   const [editorKey, setEditorKey] = useState(0);
   const [dirty, setDirty] = useState(false);
   const [versions, setVersions] = useState<CrVersion[]>([]);
@@ -101,6 +103,7 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
   useEffect(() => {
     modelPresent().then(setModelOk).catch(() => setModelOk(false));
     getSttProvider().then(setProvider).catch(() => {});
+    elevenKeyPresent().then(setKeyPresent).catch(() => {});
     if (existing?.id != null) loadVersions(existing.id);
     return () => {
       if (timerRef.current) window.clearInterval(timerRef.current);
@@ -426,6 +429,21 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
             </>
           )}
         </div>
+
+        {/* Clé ElevenLabs manquante (mode cloud) */}
+        {provider === "elevenlabs" && !keyPresent && (
+          <Card className="mb-5 flex flex-row items-start gap-3 border-warning/30 bg-warning/5 p-4">
+            <span className="mt-1.5 size-2 shrink-0 rounded-full bg-warning" />
+            <div className="text-sm">
+              <strong>Clé API ElevenLabs non configurée.</strong>
+              <p className="mt-1 text-muted-foreground">
+                Ouvrez <strong>Réglages</strong> pour coller votre clé ElevenLabs
+                (une fois par poste), ou basculez en mode <strong>Local</strong>.
+                Vous pouvez enregistrer l'audio dès maintenant.
+              </p>
+            </div>
+          </Card>
+        )}
 
         {/* Modèle absent (mode local uniquement) */}
         {provider === "local" && !modelOk && (
