@@ -7,6 +7,8 @@ import {
   authSetEmail,
   downloadModel,
   elevenKeyPresent,
+  getLetterheadJson,
+  setLetterheadJson,
   getSttProvider,
   getSttStreaming,
   modelPresent,
@@ -27,7 +29,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Card } from "@/components/ui/card";
-import { AlertTriangle, Cloud, Cpu, KeyRound } from "lucide-react";
+import { AlertTriangle, Cloud, Cpu, KeyRound, Mail } from "lucide-react";
+import {
+  DEFAULT_LETTERHEAD,
+  parseLetterhead,
+  type Letterhead,
+} from "../export/letter";
 
 export function SettingsDialog({
   open,
@@ -48,6 +55,7 @@ export function SettingsDialog({
   const [pwdNew, setPwdNew] = useState("");
   const [pwdConfirm, setPwdConfirm] = useState("");
   const [recoveryEmail, setRecoveryEmail] = useState("");
+  const [letterhead, setLetterhead] = useState<Letterhead>(DEFAULT_LETTERHEAD);
 
   useEffect(() => {
     if (!open) return;
@@ -56,14 +64,34 @@ export function SettingsDialog({
     modelPresent().then(setHasModel).catch(() => setHasModel(false));
     getSttStreaming().then(setStreaming).catch(() => {});
     authGetEmail().then((e) => setRecoveryEmail(e ?? "")).catch(() => {});
+    getLetterheadJson()
+      .then((raw) => setLetterhead(parseLetterhead(raw)))
+      .catch(() => {});
     setPwdCurrent("");
     setPwdNew("");
     setPwdConfirm("");
   }, [open]);
 
+  const saveLetterhead = async () => {
+    try {
+      await setLetterheadJson(JSON.stringify(letterhead));
+      toast.success("En-tête des courriers enregistré.");
+    } catch (e) {
+      toast.error(String(e));
+    }
+  };
+
+  const lhField = (key: keyof Letterhead, placeholder: string) => (
+    <Input
+      value={letterhead[key]}
+      placeholder={placeholder}
+      onChange={(e) => setLetterhead({ ...letterhead, [key]: e.target.value })}
+    />
+  );
+
   const changePassword = async () => {
     if (pwdNew !== pwdConfirm) {
-      toast.error("Les nouveaux mots de passe ne correspondent pas.");
+      toast.error("Les nouveaux codes ne correspondent pas.");
       return;
     }
     try {
@@ -71,7 +99,7 @@ export function SettingsDialog({
       setPwdCurrent("");
       setPwdNew("");
       setPwdConfirm("");
-      toast.success("Mot de passe modifié.");
+      toast.success("Code d'accès modifié.");
     } catch (e) {
       toast.error(String(e));
     }
@@ -260,30 +288,33 @@ export function SettingsDialog({
         </div>
 
         <div className="grid gap-2 rounded-lg border p-3">
-          <div className="text-sm font-semibold">Changer le mot de passe</div>
+          <div className="text-sm font-semibold">Changer le code d'accès</div>
           <Input
             type="password"
-            placeholder="Mot de passe actuel"
+            inputMode="numeric"
+            placeholder="Code actuel"
             value={pwdCurrent}
-            onChange={(e) => setPwdCurrent(e.target.value)}
+            onChange={(e) => setPwdCurrent(e.target.value.replace(/\D/g, ""))}
           />
           <Input
             type="password"
-            placeholder="Nouveau mot de passe (8 caractères min.)"
+            inputMode="numeric"
+            placeholder="Nouveau code (4 chiffres min.)"
             value={pwdNew}
-            onChange={(e) => setPwdNew(e.target.value)}
+            onChange={(e) => setPwdNew(e.target.value.replace(/\D/g, ""))}
           />
           <Input
             type="password"
-            placeholder="Confirmer le nouveau mot de passe"
+            inputMode="numeric"
+            placeholder="Confirmer le nouveau code"
             value={pwdConfirm}
-            onChange={(e) => setPwdConfirm(e.target.value)}
+            onChange={(e) => setPwdConfirm(e.target.value.replace(/\D/g, ""))}
           />
           <Button
             onClick={changePassword}
             disabled={!pwdCurrent || !pwdNew || !pwdConfirm}
           >
-            Modifier le mot de passe
+            Modifier le code
           </Button>
         </div>
 
@@ -291,7 +322,7 @@ export function SettingsDialog({
           <div className="text-sm font-semibold">Récupération par e-mail</div>
           <p className="text-xs text-muted-foreground">
             En cas d'oubli, un code à 6 chiffres est envoyé à cette adresse
-            depuis l'écran de connexion (« Mot de passe oublié ? »).
+            depuis l'écran de connexion (« Code oublié ? »).
           </p>
           <div className="flex gap-2">
             <Input
@@ -304,6 +335,29 @@ export function SettingsDialog({
               Enregistrer
             </Button>
           </div>
+        </div>
+
+        {/* ---- En-tête des courriers ---- */}
+        <div className="mt-2 flex items-center gap-2">
+          <Mail className="size-4 text-primary" />
+          <h3 className="text-sm font-semibold">En-tête des courriers</h3>
+        </div>
+
+        <div className="grid gap-2 rounded-lg border p-3">
+          <p className="text-xs text-muted-foreground">
+            Prénom et nom de l'utilisateur de ce poste : ils apparaissent en
+            tête des courriers PDF et dans la signature (« Docteur NOM Prénom,
+            cardiologue. »).
+          </p>
+          <div className="flex gap-2">
+            {lhField("prenom", "Prénom")}
+            {lhField("nom", "Nom")}
+          </div>
+          {lhField("titre", "CARDIOLOGUE")}
+          {lhField("adresse", "Adresse")}
+          {lhField("ville", "Code postal Ville")}
+          {lhField("tel", "Tél: …")}
+          <Button onClick={saveLetterhead}>Enregistrer l'en-tête</Button>
         </div>
       </DialogContent>
     </Dialog>

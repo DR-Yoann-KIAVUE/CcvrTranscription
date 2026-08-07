@@ -9,10 +9,16 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
 
-/// Clé de configuration du hash de mot de passe.
+/// Clé de configuration du hash du code d'accès.
 const CFG_PASSWORD: &str = "password_hash";
-/// Adresse e-mail de récupération du mot de passe.
+/// Adresse e-mail de récupération du code d'accès.
 const CFG_RECOVERY_EMAIL: &str = "recovery_email";
+/// Migration vers le digicode effectuée (le code par défaut est 0000).
+const CFG_DIGICODE_DONE: &str = "digicode_migre";
+/// Popup d'information sur le nouveau système de code à afficher.
+const CFG_DIGICODE_POPUP: &str = "digicode_popup";
+/// Code d'accès par défaut (première installation et migration).
+const DEFAULT_CODE: &str = "0000";
 /// Service d'envoi des e-mails de récupération (voir server/ + render.yaml).
 const MAIL_ENDPOINT: &str = "https://ccvr-dictee-mail.onrender.com/forgot-password";
 
@@ -84,28 +90,20 @@ fn pick_model(app: &AppHandle) -> Result<PathBuf, String> {
 
 // ---------- Commandes : authentification ----------
 
-#[tauri::command]
-fn auth_is_configured(state: State<AppState>) -> Result<bool, String> {
-    let conn = state.db.lock().map_err(|_| "verrou DB")?;
-    Ok(db::config_get(&conn, CFG_PASSWORD)?.is_some())
-}
-
-#[tauri::command]
-fn auth_setup(state: State<AppState>, password: String, email: String) -> Result<(), String> {
-    if password.chars().count() < 8 {
-        return Err("Le mot de passe doit contenir au moins 8 caractères.".into());
+/// Passage au système de digicode : à la première installation comme à la
+/// mise à jour, le code devient 0000. Pour une mise à jour (un mot de passe
+/// existait), un popup d'information est programmé.
+fn migrate_digicode(conn: &Connection) -> Result<(), String> {
+    if db::config_get(conn, CFG_DIGICODE_DONE)?.is_some() {
+        return Ok(());
     }
-    let email = email.trim().to_string();
-    if !email.contains('@') || !email.contains('.') {
-        return Err("Adresse e-mail invalide.".into());
+    let had_password = db::config_get(conn, CFG_PASSWORD)?.is_some();
+    let hash = auth::hash_password(DEFAULT_CODE)?;
+    db::config_set(conn, CFG_PASSWORD, &hash)?;
+    if had_password {
+        db::config_set(conn, CFG_DIGICODE_POPUP, "pending")?;
     }
-    let conn = state.db.lock().map_err(|_| "verrou DB")?;
-    if db::config_get(&conn, CFG_PASSWORD)?.is_some() {
-        return Err("Un mot de passe est déjà défini.".into());
-    }
-    let hash = auth::hash_password(&password)?;
-    db::config_set(&conn, CFG_PASSWORD, &hash)?;
-    db::config_set(&conn, CFG_RECOVERY_EMAIL, &email)
+    db::config_set(conn, CFG_DIGICODE_DONE, "done")
 }
 
 #[tauri::command]
@@ -114,17 +112,56 @@ fn auth_change_password(
     current: String,
     new: String,
 ) -> Result<(), String> {
-    if new.chars().count() < 8 {
-        return Err("Le nouveau mot de passe doit contenir au moins 8 caractères.".into());
+    if new.chars().count() < 4 || !new.chars().all(|c| c.is_ascii_digit()) {
+        return Err("Le nouveau code doit contenir uniquement des chiffres (4 minimum).".into());
     }
     let conn = state.db.lock().map_err(|_| "verrou DB")?;
     let hash = db::config_get(&conn, CFG_PASSWORD)?
-        .ok_or("Aucun mot de passe n'est défini.")?;
+        .ok_or("Aucun code n'est défini.")?;
     if !auth::verify_password(&current, &hash) {
-        return Err("Mot de passe actuel incorrect.".into());
+        return Err("Code actuel incorrect.".into());
     }
     let new_hash = auth::hash_password(&new)?;
     db::config_set(&conn, CFG_PASSWORD, &new_hash)
+}
+
+/// Vrai tant que le code d'accès est encore le code par défaut (0000).
+#[tauri::command]
+fn auth_is_default_code(state: State<AppState>) -> Result<bool, String> {
+    let conn = state.db.lock().map_err(|_| "verrou DB")?;
+    match db::config_get(&conn, CFG_PASSWORD)? {
+        Some(hash) => Ok(auth::verify_password(DEFAULT_CODE, &hash)),
+        None => Ok(false),
+    }
+}
+
+#[tauri::command]
+fn auth_popup_pending(state: State<AppState>) -> Result<bool, String> {
+    let conn = state.db.lock().map_err(|_| "verrou DB")?;
+    Ok(db::config_get(&conn, CFG_DIGICODE_POPUP)?.as_deref() == Some("pending"))
+}
+
+#[tauri::command]
+fn auth_popup_ack(state: State<AppState>) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|_| "verrou DB")?;
+    db::config_set(&conn, CFG_DIGICODE_POPUP, "done")
+}
+
+// ---------- Réglages : en-tête des courriers ----------
+
+const CFG_LETTERHEAD: &str = "letterhead";
+
+/// En-tête praticien pour les exports de courriers (JSON libre côté frontend).
+#[tauri::command]
+fn get_letterhead(state: State<AppState>) -> Result<Option<String>, String> {
+    let conn = state.db.lock().map_err(|_| "verrou DB")?;
+    db::config_get(&conn, CFG_LETTERHEAD)
+}
+
+#[tauri::command]
+fn set_letterhead(state: State<AppState>, json: String) -> Result<(), String> {
+    let conn = state.db.lock().map_err(|_| "verrou DB")?;
+    db::config_set(&conn, CFG_LETTERHEAD, &json)
 }
 
 #[tauri::command]
@@ -688,16 +725,21 @@ pub fn run() {
                 .join("dictee.db");
             let conn = db::open(&db_file)
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+            migrate_digicode(&conn)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
             app.manage(AppState {
                 db: Mutex::new(conn),
             });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            auth_is_configured,
-            auth_setup,
             auth_verify,
             auth_change_password,
+            auth_is_default_code,
+            auth_popup_pending,
+            auth_popup_ack,
+            get_letterhead,
+            set_letterhead,
             auth_get_email,
             auth_set_email,
             auth_forgot_password,

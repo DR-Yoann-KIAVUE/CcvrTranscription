@@ -8,6 +8,7 @@ import {
   createCompteRendu,
   elevenKeyPresent,
   elevenRealtimeToken,
+  getLetterheadJson,
   getSttProvider,
   getSttStreaming,
   listCrVersions,
@@ -26,7 +27,20 @@ import { cleanTranscript } from "../cleanup";
 import { formatDateTime, formatDuration, todayInputValue } from "../format";
 import { buildDocx } from "../export/docx";
 import { buildPdf } from "../export/pdf";
+import {
+  buildLetterPdf,
+  DEFAULT_LETTERHEAD,
+  parseLetterhead,
+  type Letterhead,
+} from "../export/letter";
 import { blocksToPlainText, parseEditorHtml } from "../export/parse";
+import {
+  LETTER_TEMPLATES,
+  introText,
+  letterHtml,
+  letterTemplateByKey,
+  reorganizeDictation,
+} from "../letterTemplates";
 import Editor, { type EditorHandle } from "./Editor";
 import { BarVisualizer } from "@/components/ui/bar-visualizer";
 import { Button } from "@/components/ui/button";
@@ -40,6 +54,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import {
   ArrowLeft,
@@ -71,6 +92,9 @@ const ORIGINE_LABEL: Record<Origine, string> = {
 
 export default function Dictation({ patient, existing, onBack, onSaved }: Props) {
   const [titre, setTitre] = useState(existing?.titre ?? "Consultation");
+  const [templateKey, setTemplateKey] = useState<string | null>(
+    letterTemplateByKey(existing?.type_cr)?.key ?? null
+  );
   const [dateConsult, setDateConsult] = useState(
     existing?.date_consultation ?? todayInputValue()
   );
@@ -218,7 +242,14 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
         ).trim();
         setLivePartial("");
         if (text) {
-          editorRef.current?.insertHtml(cleanTranscript(text));
+          const t = letterTemplateByKey(templateKey);
+          if (t) {
+            setEditorHtml(
+              reorganizeDictation(t, `${plainDictation()}\n${text}`.trim(), patient)
+            );
+          } else {
+            editorRef.current?.insertHtml(cleanTranscript(text));
+          }
           originRef.current = "transcription";
           toast.success("Transcription insérée. Relisez, corrigez, puis enregistrez.");
         } else {
@@ -257,7 +288,13 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
       const text = isCloud
         ? await transcribeElevenlabs(path)
         : await transcribe(path);
-      if (mode === "replace") setEditorHtml(cleanTranscript(text));
+      const t = letterTemplateByKey(templateKey);
+      if (t && text) {
+        const base = mode === "replace" ? "" : plainDictation();
+        setEditorHtml(
+          reorganizeDictation(t, `${base}\n${text}`.trim(), patient)
+        );
+      } else if (mode === "replace") setEditorHtml(cleanTranscript(text));
       else if (text) editorRef.current?.insertHtml(cleanTranscript(text));
       originRef.current = origine;
       if (text) toast.success("Transcription insérée. Relisez et corrigez si besoin.");
@@ -304,7 +341,7 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
         s = await createCompteRendu({
           patientId: patient.id,
           titre,
-          typeCr: null,
+          typeCr: templateKey,
           dateConsultation: dateConsult,
           texte: html,
           audioPath,
@@ -315,7 +352,7 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
         s = await updateCompteRendu({
           id: crIdRef.current,
           titre,
-          typeCr: null,
+          typeCr: templateKey,
           dateConsultation: dateConsult,
           texte: html,
           origine: originRef.current,
@@ -349,7 +386,7 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [html, titre, dateConsult, audioPath]);
+  }, [html, titre, dateConsult, audioPath, templateKey]);
 
   // Élément audio unique + état play/pause synchronisé.
   useEffect(() => {
@@ -397,6 +434,62 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
     toast.success("Version restaurée. Enregistrez pour la conserver.");
   };
 
+  // ---- Modèles de courrier ----
+
+  const currentTemplate = letterTemplateByKey(templateKey);
+
+  /**
+   * Texte du document sans le squelette des modèles : intro et clôture
+   * retirées, libellés de rubriques ramenés à leur mot-clé (pour que la
+   * réorganisation retrouve chaque contenu sans dupliquer les libellés).
+   */
+  const plainDictation = () => {
+    const intros = new Set(LETTER_TEMPLATES.map((t) => introText(t, patient)));
+    const closings = new Set(LETTER_TEMPLATES.map((t) => t.closing));
+    let out = blocksToPlainText(parseEditorHtml(html))
+      .split("\n")
+      .filter((l) => !intros.has(l.trim()) && !closings.has(l.trim()))
+      .join("\n");
+    for (const t of LETTER_TEMPLATES) {
+      for (const s of t.sections) {
+        out = out.split(s.label).join(`${s.aliases[0]} : `);
+      }
+    }
+    return out.trim();
+  };
+
+  const chooseTemplate = (key: string) => {
+    if (key === "none") {
+      setTemplateKey(null);
+      return;
+    }
+    const t = letterTemplateByKey(key);
+    if (!t) return;
+    if (hasContent) {
+      if (
+        !window.confirm(
+          `Réorganiser le texte selon le modèle « ${t.label} » ? Le texte dicté sera réparti dans les rubriques du courrier (les mots-clés dictés comme « antécédents », « conclusion »… servent de repères).`
+        )
+      )
+        return;
+      setEditorHtml(reorganizeDictation(t, plainDictation(), patient));
+    } else {
+      setEditorHtml(letterHtml(t, patient));
+    }
+    setTemplateKey(key);
+    if (titre === "Consultation" || LETTER_TEMPLATES.some((x) => x.label === titre)) {
+      setTitre(t.label);
+    }
+  };
+
+  const loadLetterhead = async (): Promise<Letterhead> => {
+    try {
+      return parseLetterhead(await getLetterheadJson());
+    } catch {
+      return DEFAULT_LETTERHEAD;
+    }
+  };
+
   const exportPdf = async () => {
     try {
       const path = await saveDialog({
@@ -404,7 +497,14 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
         filters: [{ name: "PDF", extensions: ["pdf"] }],
       });
       if (!path) return;
-      await saveBytes(path, buildPdf(html, meta()));
+      const bytes = currentTemplate
+        ? buildLetterPdf(html, {
+            letterhead: await loadLetterhead(),
+            template: currentTemplate,
+            dateConsultation: dateConsult,
+          })
+        : buildPdf(html, meta());
+      await saveBytes(path, bytes);
       toast.success("PDF exporté : " + fileName(path));
     } catch (e) {
       toast.error("Export PDF impossible : " + String(e));
@@ -687,6 +787,32 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
           </div>
 
           <div className="flex w-64 shrink-0 flex-col gap-5">
+            <Card className="gap-0 overflow-hidden py-0">
+              <div className="border-b bg-muted/40 px-4 py-2.5 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                Modèle de courrier
+              </div>
+              <div className="flex flex-col gap-2 p-3">
+                <Select value={templateKey ?? "none"} onValueChange={chooseTemplate}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Document libre" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Document libre</SelectItem>
+                    {LETTER_TEMPLATES.map((t) => (
+                      <SelectItem key={t.key} value={t.key}>
+                        {t.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground">
+                  {currentTemplate
+                    ? "Export PDF au format courrier (en-tête, date, signature). Dictez les rubriques par leur nom pour un remplissage automatique."
+                    : "Choisissez un modèle avant ou après la dictée : le texte est réparti dans les rubriques du courrier."}
+                </p>
+              </div>
+            </Card>
+
             <Card className="gap-0 overflow-hidden py-0">
               <div className="border-b bg-muted/40 px-4 py-2.5 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
                 Exports

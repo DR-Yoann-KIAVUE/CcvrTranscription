@@ -13,6 +13,11 @@ import {
 import type { CompteRendu, Patient, SearchHit } from "../types";
 import { formatDate } from "../format";
 import { reportTypeLabel } from "../reportTypes";
+import { letterTemplateLabel } from "../letterTemplates";
+
+/** Libellé du modèle (nouveaux modèles de courrier, ou anciens types). */
+const typeLabel = (key: string | null) =>
+  letterTemplateLabel(key) ?? reportTypeLabel(key);
 import { LogoMark } from "@/components/Logo";
 import { PatientAvatar } from "@/components/PatientAvatar";
 import { DataDialog } from "@/components/DataDialog";
@@ -409,9 +414,9 @@ function PatientView({
               <div>
                 <div className="flex items-center gap-2 text-sm font-semibold">
                   {cr.titre}
-                  {reportTypeLabel(cr.type_cr) && (
+                  {typeLabel(cr.type_cr) && (
                     <Badge variant="secondary" className="font-normal">
-                      {reportTypeLabel(cr.type_cr)}
+                      {typeLabel(cr.type_cr)}
                     </Badge>
                   )}
                 </div>

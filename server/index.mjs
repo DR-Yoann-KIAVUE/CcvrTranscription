@@ -72,9 +72,9 @@ const server = http.createServer((req, res) => {
           to: [to],
           subject: "CCVR Dictée — votre code de connexion",
           text:
-            `Bonjour,\n\nVotre nouveau mot de passe (code à 6 chiffres) : ${code}\n\n` +
+            `Bonjour,\n\nVotre nouveau code d'accès (6 chiffres) : ${code}\n\n` +
             "Saisissez-le sur l'écran de connexion de CCVR Dictée.\n" +
-            "Vous pourrez ensuite le remplacer par un mot de passe de votre choix dans les Réglages.\n\n" +
+            "Vous pourrez ensuite le remplacer par un code de votre choix dans les Réglages.\n\n" +
             "Si vous n'êtes pas à l'origine de cette demande, quelqu'un a accès à cet ordinateur.",
         }),
       });

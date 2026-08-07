@@ -6,14 +6,21 @@ export type Origine = "transcription" | "regeneration" | "edition";
 const nowIso = () => new Date().toISOString();
 
 // ---- Authentification ----
-export const authIsConfigured = () =>
-  invoke<boolean>("auth_is_configured");
-export const authSetup = (password: string, email: string) =>
-  invoke<void>("auth_setup", { password, email });
 export const authVerify = (password: string) =>
   invoke<boolean>("auth_verify", { password });
 export const authChangePassword = (current: string, newPassword: string) =>
   invoke<void>("auth_change_password", { current, new: newPassword });
+/** Vrai tant que le code d'accès est encore 0000. */
+export const authIsDefaultCode = () =>
+  invoke<boolean>("auth_is_default_code");
+export const authPopupPending = () => invoke<boolean>("auth_popup_pending");
+export const authPopupAck = () => invoke<void>("auth_popup_ack");
+
+// ---- En-tête des courriers ----
+export const getLetterheadJson = () =>
+  invoke<string | null>("get_letterhead");
+export const setLetterheadJson = (json: string) =>
+  invoke<void>("set_letterhead", { json });
 export const authGetEmail = () =>
   invoke<string | null>("auth_get_email");
 export const authSetEmail = (email: string) =>
