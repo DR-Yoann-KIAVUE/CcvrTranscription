@@ -41,6 +41,7 @@ export class StreamingTranscriber {
   private chunks: Float32Array[] = [];
   private ready = false;
   private errored = false;
+  private closing = false;
   private cb: Callbacks;
 
   constructor(cb: Callbacks) {
@@ -100,14 +101,20 @@ export class StreamingTranscriber {
           if (msg.message_type && msg.message_type.includes("error")) {
             // N'signale qu'une fois et arrête d'envoyer (évite le spam).
             this.ready = false;
-            if (!this.errored) {
+            if (!this.errored && !this.closing) {
               this.errored = true;
               this.cb.onError(msg.error || msg.message_type);
             }
           }
       }
     };
-    this.ws.onerror = () => this.cb.onError("Connexion temps réel interrompue.");
+    this.ws.onerror = () => {
+      // Ignore l'erreur si c'est nous qui fermons la connexion (arrêt normal,
+      // même très rapide) : ce n'est pas une vraie coupure.
+      if (this.closing || this.errored) return;
+      this.errored = true;
+      this.cb.onError("Connexion temps réel interrompue.");
+    };
 
     this.source = this.ctx.createMediaStreamSource(this.stream);
     this.processor = this.ctx.createScriptProcessor(4096, 1, 1);
@@ -141,6 +148,10 @@ export class StreamingTranscriber {
   }
 
   async stop(): Promise<{ wav: Uint8Array }> {
+    // Arrêt volontaire : à partir d'ici, toute erreur WS (fermeture, coupure
+    // pendant le teardown) est normale et ne doit pas alerter l'utilisateur.
+    this.closing = true;
+
     // Détache le micro.
     this.processor?.disconnect();
     this.source?.disconnect();
