@@ -8,10 +8,19 @@ const nowIso = () => new Date().toISOString();
 // ---- Authentification ----
 export const authIsConfigured = () =>
   invoke<boolean>("auth_is_configured");
-export const authSetup = (password: string) =>
-  invoke<void>("auth_setup", { password });
+export const authSetup = (password: string, email: string) =>
+  invoke<void>("auth_setup", { password, email });
 export const authVerify = (password: string) =>
   invoke<boolean>("auth_verify", { password });
+export const authChangePassword = (current: string, newPassword: string) =>
+  invoke<void>("auth_change_password", { current, new: newPassword });
+export const authGetEmail = () =>
+  invoke<string | null>("auth_get_email");
+export const authSetEmail = (email: string) =>
+  invoke<void>("auth_set_email", { email });
+/** Envoie le code à 6 chiffres par e-mail ; renvoie l'adresse masquée. */
+export const authForgotPassword = () =>
+  invoke<string>("auth_forgot_password");
 
 // ---- Modèle Whisper ----
 export const modelPresent = () => invoke<boolean>("model_present");

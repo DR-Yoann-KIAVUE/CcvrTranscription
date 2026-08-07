@@ -11,6 +11,10 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 /// Clé de configuration du hash de mot de passe.
 const CFG_PASSWORD: &str = "password_hash";
+/// Adresse e-mail de récupération du mot de passe.
+const CFG_RECOVERY_EMAIL: &str = "recovery_email";
+/// Service d'envoi des e-mails de récupération (voir server/ + render.yaml).
+const MAIL_ENDPOINT: &str = "https://ccvr-dictee-mail.onrender.com/forgot-password";
 
 /// État partagé : connexion SQLite protégée par mutex.
 struct AppState {
@@ -87,16 +91,110 @@ fn auth_is_configured(state: State<AppState>) -> Result<bool, String> {
 }
 
 #[tauri::command]
-fn auth_setup(state: State<AppState>, password: String) -> Result<(), String> {
+fn auth_setup(state: State<AppState>, password: String, email: String) -> Result<(), String> {
     if password.chars().count() < 8 {
         return Err("Le mot de passe doit contenir au moins 8 caractères.".into());
+    }
+    let email = email.trim().to_string();
+    if !email.contains('@') || !email.contains('.') {
+        return Err("Adresse e-mail invalide.".into());
     }
     let conn = state.db.lock().map_err(|_| "verrou DB")?;
     if db::config_get(&conn, CFG_PASSWORD)?.is_some() {
         return Err("Un mot de passe est déjà défini.".into());
     }
     let hash = auth::hash_password(&password)?;
-    db::config_set(&conn, CFG_PASSWORD, &hash)
+    db::config_set(&conn, CFG_PASSWORD, &hash)?;
+    db::config_set(&conn, CFG_RECOVERY_EMAIL, &email)
+}
+
+#[tauri::command]
+fn auth_change_password(
+    state: State<AppState>,
+    current: String,
+    new: String,
+) -> Result<(), String> {
+    if new.chars().count() < 8 {
+        return Err("Le nouveau mot de passe doit contenir au moins 8 caractères.".into());
+    }
+    let conn = state.db.lock().map_err(|_| "verrou DB")?;
+    let hash = db::config_get(&conn, CFG_PASSWORD)?
+        .ok_or("Aucun mot de passe n'est défini.")?;
+    if !auth::verify_password(&current, &hash) {
+        return Err("Mot de passe actuel incorrect.".into());
+    }
+    let new_hash = auth::hash_password(&new)?;
+    db::config_set(&conn, CFG_PASSWORD, &new_hash)
+}
+
+#[tauri::command]
+fn auth_get_email(state: State<AppState>) -> Result<Option<String>, String> {
+    let conn = state.db.lock().map_err(|_| "verrou DB")?;
+    db::config_get(&conn, CFG_RECOVERY_EMAIL)
+}
+
+#[tauri::command]
+fn auth_set_email(state: State<AppState>, email: String) -> Result<(), String> {
+    let email = email.trim().to_string();
+    if !email.contains('@') || !email.contains('.') {
+        return Err("Adresse e-mail invalide.".into());
+    }
+    let conn = state.db.lock().map_err(|_| "verrou DB")?;
+    db::config_set(&conn, CFG_RECOVERY_EMAIL, &email)
+}
+
+/// Masque une adresse pour affichage : "yoann@ex.com" -> "y•••@ex.com".
+fn mask_email(email: &str) -> String {
+    match email.split_once('@') {
+        Some((local, domain)) => {
+            let first = local.chars().next().unwrap_or('•');
+            format!("{first}•••@{domain}")
+        }
+        None => "•••".into(),
+    }
+}
+
+/// Mot de passe oublié : génère un code à 6 chiffres, demande son envoi par
+/// e-mail au service hébergé (qui détient la clé Resend), puis en fait le
+/// nouveau mot de passe. Le hash n'est remplacé qu'après envoi réussi (sinon
+/// on risquerait de verrouiller l'utilisateur).
+#[tauri::command]
+async fn auth_forgot_password(state: State<'_, AppState>) -> Result<String, String> {
+    use rand_core::RngCore;
+
+    let email = {
+        let conn = state.db.lock().map_err(|_| "verrou DB")?;
+        db::config_get(&conn, CFG_RECOVERY_EMAIL)?.unwrap_or_default()
+    };
+    let email = email.trim().to_string();
+    if email.is_empty() {
+        return Err(
+            "Aucune adresse e-mail de récupération n'est configurée sur ce poste.".into(),
+        );
+    }
+
+    let code = format!("{:06}", rand_core::OsRng.next_u32() % 1_000_000);
+    // Le service gratuit peut être en veille : la première requête peut
+    // prendre jusqu'à une minute, d'où le délai généreux.
+    let resp = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .map_err(|e| e.to_string())?
+        .post(MAIL_ENDPOINT)
+        .json(&serde_json::json!({ "to": email, "code": code }))
+        .send()
+        .await
+        .map_err(|e| format!("Connexion au service d'e-mail impossible : {e}"))?;
+    let status = resp.status();
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("Envoi de l'e-mail refusé (HTTP {}) : {}", status.as_u16(), body));
+    }
+
+    let hash = auth::hash_password(&code)?;
+    let conn = state.db.lock().map_err(|_| "verrou DB")?;
+    db::config_set(&conn, CFG_PASSWORD, &hash)?;
+    Ok(mask_email(&email))
 }
 
 #[tauri::command]
@@ -599,6 +697,10 @@ pub fn run() {
             auth_is_configured,
             auth_setup,
             auth_verify,
+            auth_change_password,
+            auth_get_email,
+            auth_set_email,
+            auth_forgot_password,
             model_present,
             models_dir_path,
             list_patients,

@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import { authIsConfigured, authSetup, authVerify } from "../api";
+import {
+  authForgotPassword,
+  authIsConfigured,
+  authSetup,
+  authVerify,
+} from "../api";
 import { LogoMark } from "@/components/Logo";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,7 +16,9 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [email, setEmail] = useState("");
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -33,10 +40,29 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
         setError("Le mot de passe doit contenir au moins 8 caractères.");
       } else if (password !== confirm) {
         setError("Les mots de passe ne correspondent pas.");
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+        setError("Saisissez une adresse e-mail valide.");
       } else {
-        await authSetup(password);
+        await authSetup(password, email.trim());
         onSuccess();
       }
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const forgotPassword = async () => {
+    setError("");
+    setInfo("");
+    setBusy(true);
+    try {
+      const masked = await authForgotPassword();
+      setPassword("");
+      setInfo(
+        `Un code à 6 chiffres a été envoyé à ${masked}. Saisissez-le ci-dessus comme mot de passe : c'est votre nouveau mot de passe (modifiable ensuite dans les Réglages).`
+      );
     } catch (err) {
       setError(String(err));
     } finally {
@@ -69,8 +95,9 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
               <div>
                 <h2 className="text-lg font-semibold">Créer votre mot de passe</h2>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Il protège vos comptes-rendus sur cet ordinateur. Choisissez un
-                  mot de passe que vous retiendrez : il n'est pas récupérable.
+                  Il protège vos comptes-rendus sur cet ordinateur. En cas
+                  d'oubli, un code de récupération pourra être envoyé à votre
+                  adresse e-mail.
                 </p>
               </div>
             )}
@@ -91,25 +118,52 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
             </div>
 
             {configured === false && (
-              <div className="grid gap-2">
-                <Label htmlFor="confirm" className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-                  Confirmer
-                </Label>
-                <Input
-                  id="confirm"
-                  type="password"
-                  value={confirm}
-                  onChange={(e) => setConfirm(e.target.value)}
-                  disabled={busy}
-                />
-              </div>
+              <>
+                <div className="grid gap-2">
+                  <Label htmlFor="confirm" className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                    Confirmer
+                  </Label>
+                  <Input
+                    id="confirm"
+                    type="password"
+                    value={confirm}
+                    onChange={(e) => setConfirm(e.target.value)}
+                    disabled={busy}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="email" className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                    Adresse e-mail
+                  </Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="pour récupérer le mot de passe en cas d'oubli"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    disabled={busy}
+                  />
+                </div>
+              </>
             )}
 
             {error && <p className="text-sm text-destructive">{error}</p>}
+            {info && <p className="text-sm text-success">{info}</p>}
 
             <Button type="submit" disabled={busy || !password} className="w-full">
               {configured === false ? "Créer et ouvrir" : "Déverrouiller"}
             </Button>
+
+            {configured && (
+              <button
+                type="button"
+                onClick={forgotPassword}
+                disabled={busy}
+                className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
+              >
+                Mot de passe oublié ?
+              </button>
+            )}
           </form>
         </CardContent>
       </Card>

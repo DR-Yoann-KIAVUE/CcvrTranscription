@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { toast } from "sonner";
 import {
+  authChangePassword,
+  authGetEmail,
+  authSetEmail,
   downloadModel,
   elevenKeyPresent,
   getSttProvider,
@@ -24,7 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Card } from "@/components/ui/card";
-import { AlertTriangle, Cloud, Cpu } from "lucide-react";
+import { AlertTriangle, Cloud, Cpu, KeyRound } from "lucide-react";
 
 export function SettingsDialog({
   open,
@@ -41,6 +44,10 @@ export function SettingsDialog({
   const [hasModel, setHasModel] = useState(true);
   const [dlProgress, setDlProgress] = useState<number | null>(null);
   const [streaming, setStreaming] = useState(true);
+  const [pwdCurrent, setPwdCurrent] = useState("");
+  const [pwdNew, setPwdNew] = useState("");
+  const [pwdConfirm, setPwdConfirm] = useState("");
+  const [recoveryEmail, setRecoveryEmail] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -48,7 +55,37 @@ export function SettingsDialog({
     elevenKeyPresent().then(setKeyPresent).catch(() => {});
     modelPresent().then(setHasModel).catch(() => setHasModel(false));
     getSttStreaming().then(setStreaming).catch(() => {});
+    authGetEmail().then((e) => setRecoveryEmail(e ?? "")).catch(() => {});
+    setPwdCurrent("");
+    setPwdNew("");
+    setPwdConfirm("");
   }, [open]);
+
+  const changePassword = async () => {
+    if (pwdNew !== pwdConfirm) {
+      toast.error("Les nouveaux mots de passe ne correspondent pas.");
+      return;
+    }
+    try {
+      await authChangePassword(pwdCurrent, pwdNew);
+      setPwdCurrent("");
+      setPwdNew("");
+      setPwdConfirm("");
+      toast.success("Mot de passe modifié.");
+    } catch (e) {
+      toast.error(String(e));
+    }
+  };
+
+  const saveRecoveryEmail = async () => {
+    try {
+      await authSetEmail(recoveryEmail);
+      toast.success("Adresse e-mail de récupération enregistrée.");
+    } catch (e) {
+      toast.error(String(e));
+    }
+  };
+
 
   const toggleStreaming = async (on: boolean) => {
     setStreaming(on);
@@ -101,11 +138,11 @@ export function SettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Réglages — moteur de transcription</DialogTitle>
+          <DialogTitle>Réglages</DialogTitle>
           <DialogDescription>
-            Choisissez comment l'audio est transcrit.
+            Moteur de transcription et sécurité.
           </DialogDescription>
         </DialogHeader>
 
@@ -215,6 +252,59 @@ export function SettingsDialog({
             </p>
           </div>
         )}
+
+        {/* ---- Sécurité ---- */}
+        <div className="mt-2 flex items-center gap-2">
+          <KeyRound className="size-4 text-primary" />
+          <h3 className="text-sm font-semibold">Sécurité</h3>
+        </div>
+
+        <div className="grid gap-2 rounded-lg border p-3">
+          <div className="text-sm font-semibold">Changer le mot de passe</div>
+          <Input
+            type="password"
+            placeholder="Mot de passe actuel"
+            value={pwdCurrent}
+            onChange={(e) => setPwdCurrent(e.target.value)}
+          />
+          <Input
+            type="password"
+            placeholder="Nouveau mot de passe (8 caractères min.)"
+            value={pwdNew}
+            onChange={(e) => setPwdNew(e.target.value)}
+          />
+          <Input
+            type="password"
+            placeholder="Confirmer le nouveau mot de passe"
+            value={pwdConfirm}
+            onChange={(e) => setPwdConfirm(e.target.value)}
+          />
+          <Button
+            onClick={changePassword}
+            disabled={!pwdCurrent || !pwdNew || !pwdConfirm}
+          >
+            Modifier le mot de passe
+          </Button>
+        </div>
+
+        <div className="grid gap-2 rounded-lg border p-3">
+          <div className="text-sm font-semibold">Récupération par e-mail</div>
+          <p className="text-xs text-muted-foreground">
+            En cas d'oubli, un code à 6 chiffres est envoyé à cette adresse
+            depuis l'écran de connexion (« Mot de passe oublié ? »).
+          </p>
+          <div className="flex gap-2">
+            <Input
+              type="email"
+              placeholder="votre@adresse.fr"
+              value={recoveryEmail}
+              onChange={(e) => setRecoveryEmail(e.target.value)}
+            />
+            <Button onClick={saveRecoveryEmail} disabled={!recoveryEmail.trim()}>
+              Enregistrer
+            </Button>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );

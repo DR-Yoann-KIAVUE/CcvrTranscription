@@ -1,0 +1,17 @@
+# Blueprint Render : service d'envoi des e-mails « mot de passe oublié ».
+# Déploiement : dashboard.render.com -> New -> Blueprint -> ce repo.
+# Renseigner RESEND_API_KEY dans l'interface Render (jamais dans le repo).
+services:
+  - type: web
+    name: ccvr-dictee-mail
+    runtime: node
+    rootDir: server
+    plan: free
+    buildCommand: "true"
+    startCommand: node index.mjs
+    healthCheckPath: /health
+    envVars:
+      - key: RESEND_API_KEY
+        sync: false
+      - key: MAIL_FROM
+        value: "CCVR Dictée <dictee@dryk.fr>"
