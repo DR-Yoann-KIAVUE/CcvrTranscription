@@ -9,6 +9,7 @@ import {
   elevenKeyPresent,
   elevenRealtimeToken,
   getLetterheadJson,
+  getSignature,
   getSttProvider,
   getSttStreaming,
   listCrVersions,
@@ -497,11 +498,17 @@ export default function Dictation({ patient, existing, onBack, onSaved }: Props)
         filters: [{ name: "PDF", extensions: ["pdf"] }],
       });
       if (!path) return;
+      const sig = currentTemplate
+        ? await getSignature().catch(() => null)
+        : null;
       const bytes = currentTemplate
         ? buildLetterPdf(html, {
             letterhead: await loadLetterhead(),
             template: currentTemplate,
             dateConsultation: dateConsult,
+            signature: sig
+              ? { bytes: new Uint8Array(sig.bytes), format: sig.format }
+              : undefined,
           })
         : buildPdf(html, meta());
       await saveBytes(path, bytes);

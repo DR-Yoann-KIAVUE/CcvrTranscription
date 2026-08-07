@@ -21,6 +21,17 @@ export const getLetterheadJson = () =>
   invoke<string | null>("get_letterhead");
 export const setLetterheadJson = (json: string) =>
   invoke<void>("set_letterhead", { json });
+
+// ---- Image de signature ----
+export interface SignatureData {
+  bytes: number[];
+  format: string; // "PNG" | "JPEG"
+}
+export const importSignature = (src: string) =>
+  invoke<void>("import_signature", { src });
+export const getSignature = () =>
+  invoke<SignatureData | null>("get_signature");
+export const clearSignature = () => invoke<void>("clear_signature");
 export const authGetEmail = () =>
   invoke<string | null>("auth_get_email");
 export const authSetEmail = (email: string) =>

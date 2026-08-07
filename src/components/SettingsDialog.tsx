@@ -1,13 +1,17 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 import {
   authChangePassword,
   authGetEmail,
   authSetEmail,
+  clearSignature,
   downloadModel,
   elevenKeyPresent,
   getLetterheadJson,
+  getSignature,
+  importSignature,
   setLetterheadJson,
   getSttProvider,
   getSttStreaming,
@@ -71,6 +75,52 @@ export function SettingsDialog({
     setPwdNew("");
     setPwdConfirm("");
   }, [open]);
+
+  const [sigUrl, setSigUrl] = useState<string | null>(null);
+
+  const refreshSignature = async () => {
+    try {
+      const s = await getSignature();
+      setSigUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        if (!s) return null;
+        const mime = s.format === "PNG" ? "image/png" : "image/jpeg";
+        return URL.createObjectURL(new Blob([new Uint8Array(s.bytes)], { type: mime }));
+      });
+    } catch {
+      setSigUrl(null);
+    }
+  };
+
+  useEffect(() => {
+    if (open) void refreshSignature();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const pickSignature = async () => {
+    try {
+      const src = await openDialog({
+        multiple: false,
+        filters: [{ name: "Image", extensions: ["png", "jpg", "jpeg"] }],
+      });
+      if (!src || typeof src !== "string") return;
+      await importSignature(src);
+      await refreshSignature();
+      toast.success("Signature enregistrée. Elle sera apposée sur les courriers PDF.");
+    } catch (e) {
+      toast.error(String(e));
+    }
+  };
+
+  const removeSignature = async () => {
+    try {
+      await clearSignature();
+      await refreshSignature();
+      toast.success("Signature supprimée.");
+    } catch (e) {
+      toast.error(String(e));
+    }
+  };
 
   const saveLetterhead = async () => {
     try {
@@ -358,6 +408,34 @@ export function SettingsDialog({
           {lhField("ville", "Code postal Ville")}
           {lhField("tel", "Tél: …")}
           <Button onClick={saveLetterhead}>Enregistrer l'en-tête</Button>
+
+          <div className="mt-2 border-t pt-3">
+            <div className="text-sm font-semibold">Signature manuscrite</div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Image de votre signature (PNG de préférence, fond blanc ou
+              transparent), apposée automatiquement en bas des courriers PDF.
+              Stockée uniquement sur cet ordinateur.
+            </p>
+            {sigUrl && (
+              <div className="mt-2 rounded-lg border bg-white p-2">
+                <img
+                  src={sigUrl}
+                  alt="Signature"
+                  className="mx-auto max-h-20 object-contain"
+                />
+              </div>
+            )}
+            <div className="mt-2 flex gap-2">
+              <Button variant="outline" onClick={pickSignature}>
+                {sigUrl ? "Remplacer l'image…" : "Choisir l'image…"}
+              </Button>
+              {sigUrl && (
+                <Button variant="outline" onClick={removeSignature}>
+                  Supprimer
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

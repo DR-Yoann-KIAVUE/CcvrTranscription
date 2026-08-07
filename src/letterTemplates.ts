@@ -30,8 +30,6 @@ export interface LetterTemplate {
   mentions: string[];
 }
 
-const MENTION_DICTEE =
-  "Courrier dicté avec un logiciel de reconnaissance vocale, merci d'en excuser les imperfections.";
 const MENTION_INFO_PATIENT =
   "Le patient a été informé des modalités, des bénéfices attendus et des effets indésirables éventuels, des prescriptions médicamenteuses, conduite thérapeutique et des examens complémentaires.";
 
@@ -78,7 +76,7 @@ export const LETTER_TEMPLATES: LetterTemplate[] = [
       { label: "CONCLUSION :", aliases: ["en conclusion", "conclusion"] },
     ],
     closing: "Amitiés",
-    mentions: [MENTION_INFO_PATIENT, MENTION_DICTEE],
+    mentions: [MENTION_INFO_PATIENT],
   },
   {
     key: "pacemaker",
@@ -93,7 +91,7 @@ export const LETTER_TEMPLATES: LetterTemplate[] = [
       { label: "Conclusion :", aliases: ["en conclusion", "conclusion"] },
     ],
     closing: "Amitiés",
-    mentions: [MENTION_DICTEE],
+    mentions: [],
   },
   {
     key: "cardioversion",
@@ -110,7 +108,7 @@ export const LETTER_TEMPLATES: LetterTemplate[] = [
       { label: "CONCLUSION :", aliases: ["en conclusion", "conclusion"] },
     ],
     closing: "Amitiés",
-    mentions: [MENTION_DICTEE],
+    mentions: [],
   },
   {
     key: "preop",
@@ -159,7 +157,7 @@ export const LETTER_TEMPLATES: LetterTemplate[] = [
       { label: "EN CONCLUSION :", aliases: ["en conclusion", "conclusion"] },
     ],
     closing: "Bien amicalement.",
-    mentions: [MENTION_DICTEE],
+    mentions: [],
   },
   {
     key: "scintigraphie",
@@ -182,16 +180,30 @@ export const LETTER_TEMPLATES: LetterTemplate[] = [
       },
       {
         label: "Aorte abdominale et iliaques :",
-        aliases: ["aorte abdominale", "iliaques", "aorte"],
+        aliases: [
+          "au niveau de l'aorte abdominale",
+          "niveau de l'aorte abdominale",
+          "au niveau de l'aorte",
+          "aorte abdominale",
+          "iliaques",
+          "iliaque",
+          "aorte",
+        ],
       },
       {
         label: "Au niveau des membres inférieurs :",
-        aliases: ["membres inferieurs", "membre inferieur"],
+        aliases: [
+          "au niveau des membres inferieurs",
+          "niveau des membres inferieurs",
+          "aux membres inferieurs",
+          "membres inferieurs",
+          "membre inferieur",
+        ],
       },
       { label: "Conclusion :", aliases: ["en conclusion", "conclusion"] },
     ],
     closing: "Amitiés",
-    mentions: [MENTION_DICTEE],
+    mentions: [],
   },
 ];
 
@@ -274,21 +286,67 @@ function fold(s: string): string {
 
 interface Match {
   section: LetterSection;
+  /** Début de l'annonce, mots transparents inclus ("euh, le traitement…"). */
+  cut: number;
   start: number;
   end: number;
 }
 
-/** Vrai si le mot-clé démarre une phrase / un paragraphe (pas en plein milieu). */
-function isAnnouncement(folded: string, start: number, end: number): boolean {
+// Mots ignorés devant un mot-clé de rubrique : hésitations et articles que le
+// médecin glisse naturellement ("euh, alors, les antécédents…").
+const TRANSPARENT_WORDS = new Set([
+  "euh",
+  "heu",
+  "alors",
+  "donc",
+  "ensuite",
+  "puis",
+  "voila",
+  "bon",
+  "et",
+  "en",
+  "le",
+  "la",
+  "les",
+  "un",
+  "une",
+]);
+
+/**
+ * Le mot-clé annonce-t-il une rubrique ? Il doit démarrer une phrase, en
+ * tolérant hésitations et articles devant ("Euh, alors, les antécédents…").
+ * Renvoie la position de début d'annonce (mots transparents inclus), ou null
+ * si le mot-clé est en plein milieu d'une phrase ("pas d'antécédents connus").
+ */
+function announcementCut(folded: string, start: number, end: number): number | null {
   // Rien d'alphanumérique juste après (évite "ecg" dans un mot plus long).
   const after = folded[end];
-  if (after !== undefined && /[a-z0-9]/.test(after)) return false;
-  // Avant : début de texte, ponctuation ou retour à la ligne (en ignorant les
-  // espaces). Rejette "les antécédents sont…" au milieu d'une phrase.
+  if (after !== undefined && /[a-z0-9]/.test(after)) return null;
+
+  let cut = start;
   let i = start - 1;
-  while (i >= 0 && folded[i] === " ") i--;
-  if (i < 0) return true;
-  return !/[a-z0-9]/.test(folded[i]);
+  for (let hops = 0; hops < 4; hops++) {
+    while (i >= 0 && folded[i] === " ") i--;
+    if (i < 0) return cut;
+    const ch = folded[i];
+    if (ch === "'") {
+      // Élision : "l'échocardiographie" passe, "pas d'antécédents" non.
+      if (folded[i - 1] === "l") {
+        cut = i - 1;
+        i -= 2;
+        continue;
+      }
+      return null;
+    }
+    if (!/[a-z0-9]/.test(ch)) return cut; // ponctuation ou retour à la ligne
+    let j = i;
+    while (j >= 0 && /[a-z]/.test(folded[j])) j--;
+    const word = folded.slice(j + 1, i + 1);
+    if (!TRANSPARENT_WORDS.has(word)) return null;
+    cut = j + 1;
+    i = j;
+  }
+  return null;
 }
 
 /**
@@ -314,8 +372,9 @@ export function reorganizeDictation(
         const idx = folded.indexOf(alias, from);
         if (idx < 0) break;
         from = idx + 1;
-        if (isAnnouncement(folded, idx, idx + alias.length)) {
-          all.push({ section, start: idx, end: idx + alias.length });
+        const cut = announcementCut(folded, idx, idx + alias.length);
+        if (cut !== null) {
+          all.push({ section, cut, start: idx, end: idx + alias.length });
         }
       }
     }
@@ -333,22 +392,31 @@ export function reorganizeDictation(
   }
 
   const contents = new Map<string, string>();
-  const cleanChunk = (raw: string) =>
-    raw
-      .replace(/^[\s:,;.?!…–—-]+/, "")
-      .replace(/\s+/g, " ")
-      .trim();
+  const cleanChunk = (raw: string) => {
+    let s = raw.replace(/\s+/g, " ").trim();
+    // Ponctuation d'attaque + hésitations en tête ("… : euh, fumeur").
+    for (let pass = 0; pass < 4; pass++) {
+      s = s.replace(/^[\s:,;.?!…–—-]+/, "").replace(/^(euh|heu)\b/i, "");
+    }
+    // Résidus d'annonce en fin de segment ("… fumeur. Euh, le").
+    for (let pass = 0; pass < 4; pass++) {
+      s = s
+        .replace(/[\s:,;…–—-]+$/, "")
+        .replace(/\b(euh|heu|alors|donc|et|le|la|les|l'|un|une)$/i, "");
+    }
+    return s.trim();
+  };
 
   for (let i = 0; i < matches.length; i++) {
     const m = matches[i];
-    const next = i + 1 < matches.length ? matches[i + 1].start : text.length;
+    const next = i + 1 < matches.length ? matches[i + 1].cut : text.length;
     const chunk = cleanChunk(text.slice(m.end, next));
     if (!chunk) continue;
     const prev = contents.get(m.section.label);
     contents.set(m.section.label, prev ? `${prev} ${chunk}` : chunk);
   }
 
-  const preambleEnd = matches.length > 0 ? matches[0].start : text.length;
+  const preambleEnd = matches.length > 0 ? matches[0].cut : text.length;
   const preamble = cleanChunk(text.slice(0, preambleEnd));
 
   return letterHtml(t, patient, contents, preamble);

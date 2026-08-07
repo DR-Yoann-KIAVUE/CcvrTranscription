@@ -164,6 +164,71 @@ fn set_letterhead(state: State<AppState>, json: String) -> Result<(), String> {
     db::config_set(&conn, CFG_LETTERHEAD, &json)
 }
 
+// ---------- Réglages : image de signature ----------
+
+const CFG_SIGNATURE: &str = "signature_path";
+
+#[derive(serde::Serialize)]
+struct SignatureData {
+    bytes: Vec<u8>,
+    format: String, // "PNG" ou "JPEG" (formats jsPDF)
+}
+
+/// Copie l'image de signature choisie dans le dossier de données local.
+#[tauri::command]
+fn import_signature(app: AppHandle, state: State<AppState>, src: String) -> Result<(), String> {
+    let ext = std::path::Path::new(&src)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    if !["png", "jpg", "jpeg"].contains(&ext.as_str()) {
+        return Err("Choisissez une image PNG ou JPEG.".into());
+    }
+    let dest = data_dir(&app)?.join(format!("signature.{ext}"));
+    fs::copy(&src, &dest).map_err(|e| format!("Copie impossible : {e}"))?;
+    let conn = state.db.lock().map_err(|_| "verrou DB")?;
+    db::config_set(&conn, CFG_SIGNATURE, &dest.display().to_string())
+}
+
+#[tauri::command]
+fn get_signature(state: State<AppState>) -> Result<Option<SignatureData>, String> {
+    let path = {
+        let conn = state.db.lock().map_err(|_| "verrou DB")?;
+        db::config_get(&conn, CFG_SIGNATURE)?
+    };
+    let Some(path) = path.filter(|p| !p.trim().is_empty()) else {
+        return Ok(None);
+    };
+    match fs::read(&path) {
+        Ok(bytes) => {
+            let format = if path.to_lowercase().ends_with(".png") {
+                "PNG"
+            } else {
+                "JPEG"
+            };
+            Ok(Some(SignatureData {
+                bytes,
+                format: format.into(),
+            }))
+        }
+        Err(_) => Ok(None),
+    }
+}
+
+#[tauri::command]
+fn clear_signature(state: State<AppState>) -> Result<(), String> {
+    let path = {
+        let conn = state.db.lock().map_err(|_| "verrou DB")?;
+        db::config_get(&conn, CFG_SIGNATURE)?
+    };
+    if let Some(p) = path.filter(|p| !p.trim().is_empty()) {
+        let _ = fs::remove_file(&p);
+    }
+    let conn = state.db.lock().map_err(|_| "verrou DB")?;
+    db::config_set(&conn, CFG_SIGNATURE, "")
+}
+
 #[tauri::command]
 fn auth_get_email(state: State<AppState>) -> Result<Option<String>, String> {
     let conn = state.db.lock().map_err(|_| "verrou DB")?;
@@ -740,6 +805,9 @@ pub fn run() {
             auth_popup_ack,
             get_letterhead,
             set_letterhead,
+            import_signature,
+            get_signature,
+            clear_signature,
             auth_get_email,
             auth_set_email,
             auth_forgot_password,

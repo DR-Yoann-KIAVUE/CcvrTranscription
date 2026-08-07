@@ -74,6 +74,8 @@ export function buildLetterPdf(
     letterhead: Letterhead;
     template: LetterTemplate;
     dateConsultation: string;
+    /** Image de signature (PNG/JPEG) insérée en bas à droite. */
+    signature?: { bytes: Uint8Array; format: string };
   }
 ): Uint8Array {
   const { letterhead, template } = opts;
@@ -189,6 +191,25 @@ export function buildLetterPdf(
   const sig = letterheadSignature(letterhead);
   if (sig) writeLine(sig, { size: 11.5 });
   writeLine(shortFrenchDate(opts.dateConsultation), { size: 11.5 });
+  if (opts.signature) {
+    try {
+      const props = doc.getImageProperties(opts.signature.bytes);
+      const w = 140;
+      const h = (w * props.height) / props.width;
+      ensureSpace(h + 12);
+      doc.addImage(
+        opts.signature.bytes,
+        opts.signature.format,
+        pageW - margin - w,
+        y - 4,
+        w,
+        h
+      );
+      y += h + 8;
+    } catch {
+      /* image illisible : le courrier sort sans l'image */
+    }
+  }
   y += 14;
 
   // ---- Mentions ----
